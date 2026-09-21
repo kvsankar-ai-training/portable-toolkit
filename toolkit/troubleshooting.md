@@ -203,37 +203,46 @@ is between Windows reaching a site and `uv` reaching it: the tools download
 through Windows, `uv` does not, and a failure in one and not the other points
 straight at the proxy handling rather than at the network.
 
-## The Python download fails with a DNS error
+## The Python or package download fails at the proxy
 
-The tools downloaded, then `uv` could not resolve anything.
+The tools install, then `uv` fails - with a DNS error, a connection timeout,
+or "tunnel error: proxy authorization required".
 
-This is the difference between the two halves of setup. The tool downloads go
-through Windows, which knows the proxy settings for this network and can run an
+The two halves of setup reach the network differently. The tool downloads go
+through Windows, which knows this network's proxy settings and can run an
 automatic configuration script to pick one per address. `uv` does neither: it
-reads proxy environment variables and nothing else. On a network where external
-names are resolved by the proxy rather than by your machine, `uv` with no proxy
-cannot resolve anything at all.
+reads proxy environment variables and nothing else, and it cannot answer a
+proxy that asks it to authenticate.
 
-Setup asks Windows what it would use and hands `uv` the same answer, so this
-should not come up. It cannot when Windows reports no proxy is needed and the
-network still expects one, or when the proxy it names is not reachable from
-here.
+So setup asks Windows what it would use, and puts Px in front of `uv` when
+there is a proxy at all - Px answers the authentication with your Windows
+session, which `uv` cannot do. Where Windows says to go direct, none of this
+happens.
 
-Give `uv` the address directly and run setup again. It is the same one your
-browser uses - Settings, Network and Internet, Proxy will show it:
+Watch for these lines in the log:
 
-```powershell
-$env:HTTPS_PROXY = 'http://your-proxy:port'
+```
+configuring px for this network's proxy: ...
+starting px so uv can get through the proxy
+uv will use http://127.0.0.1:3128
 ```
 
-If that reports 407 instead, the proxy wants authentication `uv` cannot give.
-That is what Px is for:
+If instead it says `px is not available, so uv goes straight at the proxy`,
+then Px could not be started, and a proxy that demands authentication will
+refuse `uv`. Configure Px by hand and run setup again:
 
 ```powershell
-<root>\run.cmd px --save --proxy=your-proxy:port
-<root>\run.cmd px
-$env:HTTPS_PROXY = 'http://127.0.0.1:3128'
+<root>un.cmd px --save --proxy=your-proxy:port
+<root>un.cmd px
 ```
+
+Note that a proxy can let one destination through and challenge the next, so
+Python installing successfully does not mean the packages will. The error that
+names `files.pythonhosted.org` with "proxy authorization required" is that
+case.
+
+If you would rather point `uv` somewhere yourself, setup leaves an existing
+`HTTPS_PROXY` alone, provided something is listening on it.
 
 ## "checksum mismatch"
 

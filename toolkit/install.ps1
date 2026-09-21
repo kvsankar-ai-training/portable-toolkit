@@ -162,6 +162,44 @@ function Test-Tool($tool) {
 }
 
 
+function Start-PxRelay($Root, $Upstream) {
+    # Px answers the proxy's authentication challenge using your Windows session
+    # and presents a plain, unauthenticated proxy on 127.0.0.1:3128. uv cannot
+    # answer such a challenge itself, so on a proxy that demands one this is the
+    # difference between uv working and not.
+    #
+    # Returns the address to use, or nothing if Px cannot be made to serve.
+    $px = Join-Path $Root 'px\px.exe'
+    if (-not (Test-Path $px)) { return $null }
+
+    $local = 'http://127.0.0.1:3128'
+    if (Test-ProxyReachable $local) { return $local }   # already up
+
+    # Px needs an upstream before it will stay running. If it has none, give it
+    # the one Windows resolved, which is the address the browser uses.
+    $ini = Join-Path $Root 'px\px.ini'
+    $configured = $false
+    if (Test-Path $ini) {
+        if (Select-String -Path $ini -Pattern '^\s*server\s*=\s*(\S+)' -ErrorAction SilentlyContinue) { $configured = $true }
+    }
+    if (-not $configured) {
+        if (-not $Upstream) { return $null }
+        $hostPort = ([Uri] $Upstream).Authority
+        Write-Host "  configuring px for this network's proxy: $hostPort"
+        & $px --save --proxy=$hostPort *> $null
+    }
+
+    Write-Host "  starting px so uv can get through the proxy"
+    try { Start-Process -FilePath $px -WorkingDirectory (Split-Path $px) -WindowStyle Hidden } catch { return $null }
+
+    # It binds a port; that is not instant.
+    for ($i = 0; $i -lt 10; $i++) {
+        Start-Sleep -Milliseconds 700
+        if (Test-ProxyReachable $local) { return $local }
+    }
+    $null
+}
+
 function Get-SystemProxyFor($Uri) {
     # What Windows itself would use to reach this address, including working
     # through an automatic configuration script. Returns nothing when the
@@ -331,8 +369,8 @@ function Invoke-Uv {
             $hint = " If this is a DNS or connection error, uv may need the proxy address for this network: " +
                     "set HTTPS_PROXY and run setup again."
         } elseif ($code -ne 0) {
-            $hint = " If the proxy refused authentication, start Px and point HTTPS_PROXY at it " +
-                    "(http://127.0.0.1:3128), then run setup again."
+            $hint = " If it mentions proxy authorization, the proxy wants credentials uv cannot give. Px supplies them: check it is configured for this network with run.cmd px --save --proxy=host:port, " +
+                    "then run setup again."
         }
         throw ("uv $($args -join ' ') failed with exit code $code." + $hint)
     }
@@ -462,12 +500,29 @@ $ToolkitRootOverride = $InstallRoot
 # same answer, for this install only. Where the answer is "go direct" this does
 # nothing at all.
 if (-not $env:HTTPS_PROXY) {
-    $systemProxy = Get-SystemProxyFor 'https://github.com'
-    if ($systemProxy -and (Test-ProxyReachable $systemProxy)) {
-        $env:HTTP_PROXY = $systemProxy
-        $env:HTTPS_PROXY = $systemProxy
-        Write-Host "  uv will use the proxy this network resolves to: $systemProxy"
-        Write-LogLine "uv routed through the system proxy for this network: $systemProxy"
+    # Resolve against the address uv actually struggles with. A proxy can let
+    # one destination through unauthenticated and challenge the next, so the
+    # Python download succeeding says nothing about the packages that follow.
+    $systemProxy = Get-SystemProxyFor 'https://pypi.org'
+    if (-not $systemProxy) { $systemProxy = Get-SystemProxyFor 'https://github.com' }
+
+    if ($systemProxy) {
+        # Prefer Px where it can be made to serve: it answers authentication
+        # challenges with your Windows session, which uv cannot do at all.
+        $chosen = Start-PxRelay $InstallRoot $systemProxy
+        if ($chosen) {
+            Write-LogLine "uv routed through px, which authenticates to the proxy on its behalf."
+        } elseif (Test-ProxyReachable $systemProxy) {
+            $chosen = $systemProxy
+            Write-Host "  px is not available, so uv goes straight at the proxy"
+            Write-LogLine "uv routed straight at $systemProxy. If it asks uv to authenticate, uv cannot - Px is what answers that."
+        }
+
+        if ($chosen) {
+            $env:HTTP_PROXY = $chosen
+            $env:HTTPS_PROXY = $chosen
+            Write-Host "  uv will use $chosen"
+        }
     }
 }
 
