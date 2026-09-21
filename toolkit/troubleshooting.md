@@ -177,6 +177,28 @@ delete its folder, then run setup again:
 Remove-Item <root>\px -Recurse -Force
 ```
 
+## uv fails with "failed to create underlying connection" or a tunnel error
+
+uv is being sent through a proxy that is not answering. The usual cause is Px
+being pointed at, but not actually serving - Px exits on its own if it has no
+upstream proxy configured, so a Px that was running a moment ago may be gone.
+
+Setup checks the port before routing uv through it, so it will only use Px when
+something is genuinely listening. If you set `HTTPS_PROXY` yourself, setup
+leaves it alone and trusts you, so check it points somewhere alive:
+
+```powershell
+$env:HTTPS_PROXY
+<root>\run.cmd px --quit
+<root>\run.cmd px
+```
+
+If Px will not stay running, it has no upstream proxy configured. Give it one:
+
+```powershell
+<root>\run.cmd px --save --proxy=your-proxy:port
+```
+
 ## "checksum mismatch"
 
 The file that arrived is not the file that was published. The usual cause is a

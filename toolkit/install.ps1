@@ -176,6 +176,18 @@ function Stop-RunningFrom($Folder) {
     $stopped
 }
 
+function Test-PxServing {
+    # Is anything actually accepting connections on px's port? This is the only
+    # question that matters before sending uv through it; whether a px process
+    # exists is not the same thing.
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $ok = $client.ConnectAsync('127.0.0.1', 3128).Wait(1500)
+        $client.Close()
+        return $ok
+    } catch { return $false }
+}
+
 function Restart-Stopped($tool, $wasRunning) {
     # Only the tool itself: the others were its children - px runs its own
     # bundled python - and starting one of those alone leaves a stray process.
@@ -327,48 +339,10 @@ foreach ($tool in $config.tools) {
     }
 }
 
-# Point uv inside the install root, then let it fetch Python.
-$ToolkitRootOverride = $InstallRoot
-. (Join-Path $Source 'env.ps1')
-
-# uv has no way to answer an NTLM challenge, so unlike the downloads above it
-# cannot use the logged-in session. If px is already running, send uv through
-# it for the rest of this install; px answers the challenge on uv's behalf.
-if ((Get-Process px -ErrorAction SilentlyContinue) -and -not $env:HTTPS_PROXY) {
-    $env:HTTP_PROXY = 'http://127.0.0.1:3128'
-    $env:HTTPS_PROXY = 'http://127.0.0.1:3128'
-    Write-Host "  routing uv through the running px on 127.0.0.1:3128"
-    Write-LogLine "px is running, so uv is routed through it for this install."
-}
-
-Write-Host "`nPython $($config.python.version)"
-Write-Status 'python' 'installing'
-Invoke-Uv python install $config.python.version
-$envDir = Join-Path $InstallRoot $config.python.environment
-if (Test-Path (Join-Path $envDir 'Scripts\python.exe')) {
-    Write-Host "  shared environment already exists" -ForegroundColor DarkGray
-} else {
-    # --seed puts pip inside the environment. Without it there is no pip here
-    # and a bare "pip install" would silently use another Python on the machine.
-    Invoke-Uv venv $envDir --python $config.python.version --seed
-}
-Write-Host "  one shared environment at $envDir" -ForegroundColor Green
-Write-Status 'python' 'installed'
-
-$packages = @($config.python.packages)
-if ($IncludeOptional) { $packages += @($config.python.optional_packages) }
-if ($packages.Count -gt 0) {
-    Write-Host "`nPython packages"
-    Write-Host "  this is the longest step - several hundred MB for the document libraries"
-    Write-Status 'packages' 'installing' "$($packages.Count) packages - the longest step"
-    Write-LogLine "Installing $($packages.Count) Python packages: $($packages -join ', ')"
-    Write-LogLine "This is the longest step. Several hundred MB, and uv reports below as it goes."
-    Invoke-Uv pip install @packages
-    Write-Status 'packages' 'installed'
-} else {
-    Write-Status 'packages' 'skipped' 'run again with the extras to add them'
-}
-
+# Also before Python, and for the same reason: this is what makes the install
+# folder describe itself. Without it a failure later leaves no check.ps1 or
+# uninstall.ps1 beside the tools, and nothing for the GUI to recognise the
+# install by.
 # Keep the scripts and the manifest beside what they installed, so the folder
 # describes itself after the extracted copy is deleted.
 $destToolkit = Join-Path $InstallRoot 'toolkit'
@@ -385,12 +359,11 @@ if ($Source -ne $destToolkit) {
     }
 }
 
-# The download cache is only needed while installing. The installed files are
-# hard links, so they survive it being emptied.
-Invoke-Uv cache clean
-
-Write-Host "`nInstalled." -ForegroundColor Green
-
+# Done before Python, deliberately. The Python download is the longest and
+# most fragile step - a proxy can fail it - and if PATH were updated after it,
+# a failure there would leave the tools installed but reachable by nobody,
+# with the GUI reporting everything as not ready. The entries are static
+# paths, so they are just as correct now as later.
 # The one change outside the install folder. Rebuilt from scratch each run,
 # rather than only appending whatever is missing, so re-running this also
 # fixes the order if it was ever wrong - which is exactly what happened when
@@ -421,6 +394,60 @@ if ($answer -eq '' -or $answer -eq 'y') {
     Write-Host "Not added. Use $InstallRoot\run.cmd <command> instead, or run toolkit\env.ps1 in a window."
     Write-Status 'path' 'skipped'
 }
+
+# Point uv inside the install root, then let it fetch Python.
+$ToolkitRootOverride = $InstallRoot
+. (Join-Path $Source 'env.ps1')
+
+# uv has no way to answer an NTLM challenge, so unlike the downloads above it
+# cannot use the logged-in session. Px can answer on its behalf - but only if
+# Px is genuinely serving. A process existing is not enough: Px exits when it
+# has no upstream proxy configured, and setup may have only just restarted it,
+# so the process can be there for a moment and gone by the time uv runs.
+# Pointing uv at a port with nothing behind it turns a working direct download
+# into "failed to create underlying connection", which is worse than leaving
+# it alone. So connect to the port and see.
+if (-not $env:HTTPS_PROXY -and (Test-PxServing)) {
+    $env:HTTP_PROXY = 'http://127.0.0.1:3128'
+    $env:HTTPS_PROXY = 'http://127.0.0.1:3128'
+    Write-Host "  routing uv through px on 127.0.0.1:3128"
+    Write-LogLine "px is serving, so uv is routed through it for this install."
+}
+
+Write-Host "`nPython $($config.python.version)"
+Write-Status 'python' 'installing'
+Invoke-Uv python install $config.python.version
+$envDir = Join-Path $InstallRoot $config.python.environment
+if (Test-Path (Join-Path $envDir 'Scripts\python.exe')) {
+    Write-Host "  shared environment already exists" -ForegroundColor DarkGray
+} else {
+    # --seed puts pip inside the environment. Without it there is no pip here
+    # and a bare "pip install" would silently use another Python on the machine.
+    Invoke-Uv venv $envDir --python $config.python.version --seed
+}
+Write-Host "  one shared environment at $envDir" -ForegroundColor Green
+Write-Status 'python' 'installed'
+
+$packages = @($config.python.packages)
+if ($IncludeOptional) { $packages += @($config.python.optional_packages) }
+if ($packages.Count -gt 0) {
+    Write-Host "`nPython packages"
+    Write-Host "  this is the longest step - several hundred MB for the document libraries"
+    Write-Status 'packages' 'installing' "$($packages.Count) packages - the longest step"
+    Write-LogLine "Installing $($packages.Count) Python packages: $($packages -join ', ')"
+    Write-LogLine "This is the longest step. Several hundred MB, and uv reports below as it goes."
+    Invoke-Uv pip install @packages
+    Write-Status 'packages' 'installed'
+} else {
+    Write-Status 'packages' 'skipped' 'run again with the extras to add them'
+}
+
+
+# The download cache is only needed while installing. The installed files are
+# hard links, so they survive it being emptied.
+Invoke-Uv cache clean
+
+Write-Host "`nInstalled." -ForegroundColor Green
 
 Write-Host "`nEverything is in $InstallRoot. To check it:  $InstallRoot\toolkit\check.ps1"
 Write-Host "To remove it:                              $InstallRoot\toolkit\uninstall.ps1"
