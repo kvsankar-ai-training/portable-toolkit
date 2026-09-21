@@ -96,10 +96,39 @@ function Select-InstallRoot {
     throw "No writable install location. Tried $($config.install.root) and $($config.install.fallback_root)."
 }
 
-function Test-Tool($tool) {
+function Test-ToolRuns($tool) {
+    # Actually run it. Only meaningful straight after installing, when nothing
+    # else is holding the folder - see Test-Tool for why this is not the check
+    # used to decide whether a tool needs installing.
     $exe = Join-Path $InstallRoot ($tool.verify[0] -replace '/', '\')
     if (-not (Test-Path $exe)) { return $false }
     try { & $exe $tool.verify[1] *> $null; return ($LASTEXITCODE -eq 0) } catch { return $false }
+}
+
+function Get-VersionStampPath($tool) {
+    Join-Path (Join-Path $InstallRoot $tool.target) '.installed-version'
+}
+
+function Test-Tool($tool) {
+    # Is this tool already installed at the version the manifest asks for?
+    #
+    # Deciding that by running the tool looks obvious and is wrong. px exits
+    # non-zero when another copy of itself is already running, so asking px
+    # whether it is installed says no precisely when it is installed and in
+    # use - and setup would then try to replace files that running copy holds
+    # open, which Windows refuses. A version recorded at install time answers
+    # the question without launching anything.
+    $exe = Join-Path $InstallRoot ($tool.verify[0] -replace '/', '\')
+    if (-not (Test-Path $exe)) { return $false }
+
+    $stamp = Get-VersionStampPath $tool
+    if (Test-Path $stamp) {
+        $recorded = (Get-Content $stamp -Raw -ErrorAction SilentlyContinue)
+        return (($recorded -replace '\s', '') -eq $tool.version)
+    }
+
+    # No stamp: installed before stamps existed, so fall back to asking it.
+    Test-ToolRuns $tool
 }
 
 function Get-DownloadArgs($Uri, $OutFile) {
@@ -147,6 +176,16 @@ function Stop-RunningFrom($Folder) {
     $stopped
 }
 
+function Restart-Stopped($tool, $wasRunning) {
+    # Only the tool itself: the others were its children - px runs its own
+    # bundled python - and starting one of those alone leaves a stray process.
+    $main = Join-Path $InstallRoot ($tool.verify[0] -replace '/', '\')
+    if (($wasRunning -contains $main) -and (Test-Path $main)) {
+        Write-Host "  restarting $($tool.name)"
+        try { Start-Process -FilePath $main -WorkingDirectory (Split-Path $main) -WindowStyle Hidden } catch { }
+    }
+}
+
 function Install-Tool($tool) {
     Write-Status $tool.name 'downloading'
     $zip = Join-Path $env:TEMP "portable-toolkit-$($tool.name).zip"
@@ -174,7 +213,27 @@ function Install-Tool($tool) {
 
     $dest = Join-Path $InstallRoot $tool.target
     $wasRunning = Stop-RunningFrom $dest
-    if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+    if (Test-Path $dest) {
+        try {
+            Remove-Item $dest -Recurse -Force -ErrorAction Stop
+        } catch {
+            # Something in there is still open and would not let go. If a usable
+            # copy is already installed, that is not worth failing the whole run
+            # for - keep it and carry on, so the rest of the toolkit still gets
+            # set up. Only a folder with nothing usable in it is fatal.
+            $exe = Join-Path $InstallRoot ($tool.verify[0] -replace '/', '\')
+            if (Test-Path $exe) {
+                Write-Host "  in use and cannot be replaced - keeping the copy already installed" -ForegroundColor Yellow
+                Write-LogLine "$($tool.name) is in use, so the installed copy was kept rather than replaced."
+                Write-Status $tool.name 'kept' 'in use, existing copy kept'
+                if (Test-Path $zip) { Remove-Item $zip -Force }
+                Restart-Stopped $tool $wasRunning
+                return
+            }
+            throw ("$($tool.name): cannot replace $dest because something has files there open. " +
+                   "Close it and run setup again. " + $_.Exception.Message)
+        }
+    }
 
     if ($tool.archive -eq 'none') {
         # Not an archive at all, just the executable. jq is published this way.
@@ -194,18 +253,14 @@ function Install-Tool($tool) {
     # Already gone when the download was the executable itself and was moved.
     if (Test-Path $zip) { Remove-Item $zip -Force }
 
-    # Put the tool itself back if it had to be stopped, and only the tool: the
-    # others were its children - px runs its own bundled python - and starting
-    # one of those on its own would leave a stray process doing nothing.
-    $main = Join-Path $InstallRoot ($tool.verify[0] -replace '/', '\')
-    if (($wasRunning -contains $main) -and (Test-Path $main)) {
-        Write-Host "  restarting $($tool.name)"
-        try { Start-Process -FilePath $main -WorkingDirectory (Split-Path $main) -WindowStyle Hidden } catch { }
-    }
-
-    if (-not (Test-Tool $tool)) { throw "$($tool.name): installed, but it does not run." }
+    if (-not (Test-ToolRuns $tool)) { throw "$($tool.name): installed, but it does not run." }
+    Set-Content -Path (Get-VersionStampPath $tool) -Value $tool.version -Encoding ASCII
     Write-Host "  installed and runs" -ForegroundColor Green
     Write-Status $tool.name 'installed'
+
+    # Started last, so the verification above ran with nothing of this tool's
+    # already up - which is the state px needs to report success.
+    Restart-Stopped $tool $wasRunning
 }
 
 function Invoke-Uv {

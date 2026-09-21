@@ -328,6 +328,7 @@ function Set-ProgressState {
         'updating'          { 'Updating...' }
         'updated'           { 'Done' }
         'skipped'           { 'Skipped' }
+        'kept'              { 'Already installed, left as it is' }
         'left-running'      { 'Left running - needed to reinstall' }
         'done'              { 'Done' }
         'pending'           { 'Waiting...' }

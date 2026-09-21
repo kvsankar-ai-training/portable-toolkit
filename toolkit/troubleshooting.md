@@ -155,14 +155,26 @@ stops it, and that deletes its files too.
 
 Something in that folder is running, and Windows will not let a running
 program's files be replaced. Px is the usual one, because it stays running in
-the background, and the file named is normally inside its bundled Python.
+the background, and the file named is normally inside its bundled Python
+rather than `px.exe` itself.
 
-Setup stops whatever is running from a tool's folder before replacing it and
-starts the tool again afterwards, so this should not come up. If it does, the
-process did not stop when asked. Close it and run setup again:
+Setup avoids this in two ways. It records the version it installed, so a tool
+already at the right version is left alone rather than reinstalled - asking a
+tool whether it is installed by running it is unreliable, because px exits
+non-zero while another copy of itself is running. And when a folder does have
+to be replaced, setup stops whatever is running from it first and starts the
+tool again afterwards.
+
+If the files still cannot be replaced, setup keeps the copy already installed,
+says so, and carries on with the rest rather than stopping. Nothing is lost:
+the tool that was there still works.
+
+To force a genuine reinstall of one tool, close whatever is using it and
+delete its folder, then run setup again:
 
 ```powershell
 <root>\run.cmd px --quit
+Remove-Item <root>\px -Recurse -Force
 ```
 
 ## "checksum mismatch"
