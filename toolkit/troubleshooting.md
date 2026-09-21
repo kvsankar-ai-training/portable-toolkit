@@ -151,6 +151,20 @@ carry it:
 A plain uninstall leaves Px alone for this reason. Only `uninstall.ps1 -Full`
 stops it, and that deletes its files too.
 
+## Setup stops with "access to the path ... is denied"
+
+Something in that folder is running, and Windows will not let a running
+program's files be replaced. Px is the usual one, because it stays running in
+the background, and the file named is normally inside its bundled Python.
+
+Setup stops whatever is running from a tool's folder before replacing it and
+starts the tool again afterwards, so this should not come up. If it does, the
+process did not stop when asked. Close it and run setup again:
+
+```powershell
+<root>\run.cmd px --quit
+```
+
 ## "checksum mismatch"
 
 The file that arrived is not the file that was published. The usual cause is a

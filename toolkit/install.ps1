@@ -122,6 +122,31 @@ function Get-DownloadArgs($Uri, $OutFile) {
     $splat
 }
 
+function Stop-RunningFrom($Folder) {
+    # A program that is running holds its own files open, and Windows refuses to
+    # replace or delete them - reinstalling px over a running px fails on the
+    # .pyd inside its bundled Python. Returns what was stopped so the caller can
+    # start it again afterwards; px in particular is how this machine reaches
+    # the internet, so leaving it stopped would break the rest of the install.
+    $stopped = @()
+    if (-not (Test-Path $Folder)) { return $stopped }
+    $full = (Get-Item $Folder).FullName.TrimEnd('\')
+
+    foreach ($proc in (Get-Process -ErrorAction SilentlyContinue)) {
+        $path = try { $proc.Path } catch { $null }
+        if (-not $path) { continue }
+        if (-not $path.StartsWith("$full\", [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+
+        Write-Host "  stopping $($proc.ProcessName), which is running from this folder"
+        $stopped += $path
+        if ($proc.ProcessName -eq 'px') { & $path --quit *> $null }   # px shuts down cleanly and frees its port
+        Start-Sleep -Milliseconds 500
+        try { if (-not $proc.HasExited) { $proc | Stop-Process -Force -ErrorAction Stop } } catch { }
+    }
+    if ($stopped.Count) { Start-Sleep -Milliseconds 800 }
+    $stopped
+}
+
 function Install-Tool($tool) {
     Write-Status $tool.name 'downloading'
     $zip = Join-Path $env:TEMP "portable-toolkit-$($tool.name).zip"
@@ -148,6 +173,7 @@ function Install-Tool($tool) {
     Write-Status $tool.name 'verified'
 
     $dest = Join-Path $InstallRoot $tool.target
+    $wasRunning = Stop-RunningFrom $dest
     if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 
     if ($tool.archive -eq 'none') {
@@ -167,6 +193,16 @@ function Install-Tool($tool) {
 
     # Already gone when the download was the executable itself and was moved.
     if (Test-Path $zip) { Remove-Item $zip -Force }
+
+    # Put the tool itself back if it had to be stopped, and only the tool: the
+    # others were its children - px runs its own bundled python - and starting
+    # one of those on its own would leave a stray process doing nothing.
+    $main = Join-Path $InstallRoot ($tool.verify[0] -replace '/', '\')
+    if (($wasRunning -contains $main) -and (Test-Path $main)) {
+        Write-Host "  restarting $($tool.name)"
+        try { Start-Process -FilePath $main -WorkingDirectory (Split-Path $main) -WindowStyle Hidden } catch { }
+    }
+
     if (-not (Test-Tool $tool)) { throw "$($tool.name): installed, but it does not run." }
     Write-Host "  installed and runs" -ForegroundColor Green
     Write-Status $tool.name 'installed'
