@@ -124,33 +124,32 @@ a custom certificate were configured at some point while diagnosing a
 different problem, remove the certificate variables first and see if the
 proxy alone is now enough - it may be the underlying issue px already solved.
 
-## Setup fails with 407, and it worked the last time
+## Setup fails with "407 Proxy Authentication Required"
 
-A 407 means the proxy wants credentials. Two things can cause it to appear
-between one install and the next.
+Your proxy wants credentials before it will pass the download through.
 
-**Px was stopped.** If your network needs Px, it is how everything here
-reaches the internet. Older versions of `uninstall.ps1` stopped and
-deregistered it even on a plain uninstall, so the next install had nothing to
-authenticate through. It is now left alone unless you ask for a full removal.
-Start it again:
+Setup offers your logged-in Windows session, which is what a browser does, and
+that is enough for most proxies. `uv` cannot do this - it has no way to answer
+an NTLM or Kerberos challenge - so the Python download needs Px running. Setup
+routes `uv` through Px automatically when it finds it running.
+
+So: start Px, then run setup again.
 
 ```powershell
 <root>\run.cmd px
 ```
 
-**The proxy wants NTLM or Kerberos.** Setup now offers your logged-in Windows
-session when it downloads, which is what a browser does, so this should pass
-without Px. `uv` cannot do that - it has no way to answer the challenge - so
-the Python download still needs Px running. Setup detects a running Px and
-routes `uv` through it automatically.
-
-If it still fails, configure Px and try again:
+If Px has never been configured on this machine, give it the proxy address
+first. Whoever runs your network has it, and `toolkit\site.json` may already
+carry it:
 
 ```powershell
 <root>\run.cmd px --save --proxy=your-proxy:port
 <root>\run.cmd px
 ```
+
+A plain uninstall leaves Px alone for this reason. Only `uninstall.ps1 -Full`
+stops it, and that deletes its files too.
 
 ## "checksum mismatch"
 
@@ -235,30 +234,31 @@ Uninstall. Full asks for confirmation first.
 
 ## Antivirus quarantined the toolkit
 
-Behavioural antivirus engines watch what a program does rather than what it
-contains. This installer downloads executables, writes them to a folder, adds
-that folder to PATH and runs them, which is also what a malware dropper does.
-Some engines act on that pattern.
+Files disappear, or a script that was there a moment ago reports as missing.
 
-Observed on Bitdefender, detection name `Atc4.Detection` from Active Threat
-Control: sixteen files quarantined across two waves, including the installed
-copies of every script, both `.cmd` entry points, and the original `install.ps1`
-in the source folder it was run from. Disabling the engine did not release the
-files; the quarantine records held a lock on those exact paths until they were
-restored or deleted through the antivirus console.
+Behavioural antivirus watches what a program does rather than what it contains.
+This installer downloads executables, writes them to a folder, puts that folder
+on PATH and runs them - which is also what a malware dropper does. Some engines
+act on that pattern. Bitdefender's Active Threat Control reports it as
+`Atc4.Detection`.
 
-Nothing here is a false claim about the software: the behaviour really is what
-the engine describes. There is no way to work around it from inside the toolkit
-and no attempt should be made.
+The engine is describing the behaviour accurately. There is no way around it
+from inside the toolkit and no attempt should be made.
+
+Expect it to take more than the obvious files. It can quarantine the installed
+copies and the installer you ran them from, and the quarantine record holds a
+lock on each path afterwards, so writing the file back fails until the record
+is cleared through the antivirus console. Turning the engine off does not
+release them.
 
 What to do:
 
-1. Record the detection name and the list of files. It is evidence that the
-   detection is heuristic rather than a signature match.
-2. Report it to whoever runs endpoint security, and ask for the install root
-   and the download folder to be excluded, including in the behavioural engine,
-   which is usually configured separately from the file scanner.
-3. Do not re-run setup until that is in place. Each run risks another wave.
+1. Record the detection name and which files went. A heuristic name rather
+   than a named piece of malware is the useful detail.
+2. Ask whoever runs endpoint security to exclude the install root and the
+   folder you extracted to. The behavioural engine is usually configured
+   separately from the file scanner, so both need it.
+3. Do not re-run setup until that is in place. Each run risks another sweep.
 
-On a managed machine a participant can do none of this themselves, so it needs
-to be resolved before a session rather than during one.
+On a managed machine none of this is something you can do yourself, so it has
+to be settled before a session rather than during one.
