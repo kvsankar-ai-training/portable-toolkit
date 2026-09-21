@@ -41,6 +41,51 @@ $script:Root = Resolve-InstallRoot
 
 function Get-PxPath { Join-Path $script:Root 'px\px.exe' }
 
+function Test-PxListening {
+    # Whether anything is answering on Px's port. A px process existing is not
+    # the same thing: it exits by itself when it has no upstream configured.
+    try {
+        $c = New-Object System.Net.Sockets.TcpClient
+        $ok = $c.ConnectAsync('127.0.0.1', 3128).Wait(1500)
+        $c.Close()
+        return $ok
+    } catch { return $false }
+}
+
+function Start-PxForCopilot {
+    # Copilot is the reason Px is here: it cannot get through an authenticating
+    # proxy on its own. Starting Copilot without Px running, on a network that
+    # needs it, reproduces the failure this button exists to avoid.
+    #
+    # Sets the proxy variables in this process only, so the Copilot started
+    # below inherits them. Nothing is written to your account or the machine.
+    $px = Get-PxPath
+    if (-not (Test-Path $px)) { return $false }
+
+    if (-not (Test-PxListening)) {
+        if (-not (Get-SavedPxProxy)) {
+            Write-Log "Px has no proxy saved, so it was not started. If Copilot cannot sign in, put the address above and press Save & start."
+            return $false
+        }
+        Write-Log "Starting Px so Copilot can get through the proxy ..."
+        try { Start-Process -FilePath $px -WorkingDirectory (Split-Path $px) -WindowStyle Hidden } catch { }
+        for ($i = 0; $i -lt 10; $i++) {
+            Start-Sleep -Milliseconds 700
+            if (Test-PxListening) { break }
+        }
+    }
+
+    if (Test-PxListening) {
+        $env:HTTP_PROXY = 'http://127.0.0.1:3128'
+        $env:HTTPS_PROXY = 'http://127.0.0.1:3128'
+        Write-Log "Px is serving. Copilot will start pointed at it."
+        return $true
+    }
+
+    Write-Log "Px did not start. Copilot starts with the proxy settings as they are."
+    $false
+}
+
 function Get-CopilotAppPath {
     $exe = Join-Path $env:LOCALAPPDATA 'Programs\GitHub Copilot\github.exe'
     if (Test-Path $exe) { $exe }
@@ -314,7 +359,7 @@ $btnLaunchCopilot.Size = New-Object System.Drawing.Size(170, 28)
 $grpCopilot.Controls.Add($btnLaunchCopilot)
 
 $lblCopilotHint = New-Object System.Windows.Forms.Label
-$lblCopilotHint.Text = "Closes it if already running, then reopens it with today's proxy settings"
+$lblCopilotHint.Text = "Closes it if running, starts Px if needed, then reopens it"
 $lblCopilotHint.Location = New-Object System.Drawing.Point(195, 27)
 $lblCopilotHint.AutoSize = $true
 $lblCopilotHint.ForeColor = [System.Drawing.Color]::Gray
@@ -646,9 +691,12 @@ $btnLaunchCopilot.Add_Click({
         }
     }
 
+    # Order matters. Sync-Environment rebuilds the proxy variables from your
+    # account settings, and would undo the next line if it ran after it.
     Sync-Environment
+    [void](Start-PxForCopilot)
     Start-Process -FilePath $exe
-    Write-Log "Launched GitHub Copilot with today's proxy settings."
+    Write-Log "Launched GitHub Copilot."
 })
 
 # ---- go ---------------------------------------------------------------------

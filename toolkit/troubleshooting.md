@@ -114,8 +114,13 @@ $env:HTTPS_PROXY = 'http://127.0.0.1:3128'
 
 Then fully close and reopen GitHub Copilot's desktop app so it picks up the
 change - `GUI.cmd` has a "Launch (fresh settings)" button under GitHub Copilot
-desktop app that does exactly this: closes any running copy and reopens it
-with the current proxy settings, rather than whatever it started with.
+desktop app that does this for you: it closes any running copy, starts Px if
+Px is configured and not already serving, points the app at it, and reopens
+it. A running app keeps the environment it started with, which is why
+restarting it is the point.
+
+If Px has no proxy saved, the button says so and starts the app anyway with
+the settings as they are.
 
 Do not also set `NODE_EXTRA_CA_CERTS` or `SSL_CERT_FILE` to a custom
 certificate file alongside this. Windows already trusts your organisation's
@@ -232,8 +237,10 @@ then Px could not be started, and a proxy that demands authentication will
 refuse `uv`. Configure Px by hand and run setup again:
 
 ```powershell
-<root>un.cmd px --save --proxy=your-proxy:port
-<root>un.cmd px
+<root>
+un.cmd px --save --proxy=your-proxy:port
+<root>
+un.cmd px
 ```
 
 Note that a proxy can let one destination through and challenge the next, so
