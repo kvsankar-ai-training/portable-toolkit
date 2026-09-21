@@ -251,37 +251,58 @@ $rdoBasic.Add_CheckedChanged($updateMode)
 $rdoFull.Add_CheckedChanged($updateMode)
 & $updateMode
 
-# ---- progress panel ----------------------------------------------------------
+# ---- status panel ------------------------------------------------------------
 
-# One row per tool in tools.json, plus python, so adding a tool there is still
-# the only edit needed - this panel does not need to know their names in advance.
-$progressNames = @($config.tools | ForEach-Object { $_.name }) + @('python', 'packages')
+# Named Status rather than Progress because that is what it shows nearly all of
+# the time: what is installed right now. It only reports progress while setup is
+# running.
+#
+# Split the same way the Setup buttons offer, so a Basic install does not list
+# three things as missing that were never asked for. Both columns come from
+# tools.json, so adding a tool there is still the only edit needed - which side
+# it lands on follows its tier.
+$basicNames = @($config.tools | Where-Object { $_.tier -ne 'optional' } | ForEach-Object { $_.name }) + @('python')
+$fullNames  = @($config.tools | Where-Object { $_.tier -eq 'optional' } | ForEach-Object { $_.name }) + @('packages')
 $script:statusLabels = @{}
 
+$rows = [Math]::Max($basicNames.Count, $fullNames.Count)
+
 $grpProgress = New-Object System.Windows.Forms.GroupBox
-$grpProgress.Text = "Progress"
+$grpProgress.Text = "Status"
 $grpProgress.Location = New-Object System.Drawing.Point(12, ($grpSetup.Bottom + 8))
-$grpProgress.Size = New-Object System.Drawing.Size(520, (24 + 20 * $progressNames.Count))
+$grpProgress.Size = New-Object System.Drawing.Size(520, (44 + 20 * $rows))
 $form.Controls.Add($grpProgress)
 
-$y = 22
-foreach ($name in $progressNames) {
-    $lblName = New-Object System.Windows.Forms.Label
-    $lblName.Text = $name
-    $lblName.Location = New-Object System.Drawing.Point(15, $y)
-    $lblName.Size = New-Object System.Drawing.Size(80, 18)
-    $grpProgress.Controls.Add($lblName)
+function Add-StatusColumn($Names, $Heading, $X, $Width) {
+    $lblHead = New-Object System.Windows.Forms.Label
+    $lblHead.Text = $Heading
+    $lblHead.Location = New-Object System.Drawing.Point($X, 20)
+    $lblHead.Size = New-Object System.Drawing.Size($Width, 16)
+    $lblHead.ForeColor = [System.Drawing.Color]::DimGray
+    $grpProgress.Controls.Add($lblHead)
 
-    $lblState = New-Object System.Windows.Forms.Label
-    $lblState.Text = "checking..."
-    $lblState.ForeColor = [System.Drawing.Color]::Gray
-    $lblState.Location = New-Object System.Drawing.Point(100, $y)
-    $lblState.Size = New-Object System.Drawing.Size(400, 18)
-    $grpProgress.Controls.Add($lblState)
+    $y = 40
+    foreach ($name in $Names) {
+        $lblName = New-Object System.Windows.Forms.Label
+        $lblName.Text = $name
+        $lblName.Location = New-Object System.Drawing.Point($X, $y)
+        $lblName.Size = New-Object System.Drawing.Size(62, 18)
+        $grpProgress.Controls.Add($lblName)
 
-    $script:statusLabels[$name] = $lblState
-    $y += 20
+        $lblState = New-Object System.Windows.Forms.Label
+        $lblState.Text = "checking..."
+        $lblState.ForeColor = [System.Drawing.Color]::Gray
+        $lblState.Location = New-Object System.Drawing.Point(($X + 66), $y)
+        $lblState.Size = New-Object System.Drawing.Size(($Width - 66), 18)
+        $grpProgress.Controls.Add($lblState)
+
+        $script:statusLabels[$name] = $lblState
+        $y += 20
+    }
 }
+
+Add-StatusColumn $basicNames 'Basic' 15 240
+Add-StatusColumn $fullNames  'Full'  270 235
 
 # ---- px group ---------------------------------------------------------------
 
@@ -458,6 +479,7 @@ function Set-ProgressState {
         'updating'          { 'Updating...' }
         'updated'           { 'Done' }
         'skipped'           { 'Skipped' }
+        'not-asked-for'     { 'Not installed - choose Full to add' }
         'kept'              { 'Already installed, left as it is' }
         'left-running'      { 'Left running - needed to reinstall' }
         'done'              { 'Done' }
@@ -468,6 +490,7 @@ function Set-ProgressState {
     $color = switch -Regex ($State) {
         'error'                                                      { [System.Drawing.Color]::Red; break }
         'ready|installed|already-installed|updated|done'             { [System.Drawing.Color]::DarkGreen; break }
+        'not-asked-for'                                              { [System.Drawing.Color]::Gray; break }
         'not installed|needs-setup'                                  { [System.Drawing.Color]::DarkOrange; break }
         'pending'                                                    { [System.Drawing.Color]::Gray; break }
         default                                                      { [System.Drawing.Color]::SteelBlue }
@@ -499,21 +522,40 @@ function Update-Status {
     # the progress labels; overwriting them here would fight with that.
     if ($script:trackedProcess) { return }
 
+    # "Ready" means the Basic set works. A Full item that was never asked for is
+    # not a fault and must not drag the verdict down, or a perfectly good Basic
+    # install reports itself broken.
     $allReady = $true
     foreach ($tool in $config.tools) {
-        if (Test-PersistentTool $tool) {
-            $ready = Test-ToolReady (Get-ToolCommandName $tool)
-            Set-ProgressState $tool.name $(if ($ready) { 'ready' } else { 'needs-setup' })
-            if (-not $ready) { $allReady = $false }
-        } else {
+        $optional = $tool.tier -eq 'optional'
+        $installed = Test-ToolInstalled $tool
+
+        if (-not (Test-PersistentTool $tool)) {
             # px: not something anyone types by name, so "ready" does not apply -
             # its own line above already covers whether it is doing anything.
-            Set-ProgressState $tool.name $(if (Test-ToolInstalled $tool) { 'installed' } else { 'not installed' })
+            Set-ProgressState $tool.name $(if ($installed) { 'installed' } else { 'not installed' })
+            continue
         }
+
+        if ($optional -and -not $installed) {
+            Set-ProgressState $tool.name 'not-asked-for'
+            continue
+        }
+
+        $ready = Test-ToolReady (Get-ToolCommandName $tool)
+        Set-ProgressState $tool.name $(if ($ready) { 'ready' } else { 'needs-setup' })
+        if (-not $ready -and -not $optional) { $allReady = $false }
     }
+
     $pythonReady = Test-ToolReady 'python'
     Set-ProgressState 'python' $(if ($pythonReady) { 'ready' } else { 'needs-setup' })
     if (-not $pythonReady) { $allReady = $false }
+
+    # The document libraries. Looking for one of them on disk rather than asking
+    # Python to import them, because this runs on a timer and launching an
+    # interpreter every second to answer it would be absurd.
+    $marker = Join-Path $script:Root ($config.python.environment + '\Lib\site-packages\markitdown')
+    Set-ProgressState 'packages' $(if (Test-Path $marker) { 'installed' } else { 'not-asked-for' })
 
     if ($allReady) {
         $lblStatus.Text = "Ready to use"
