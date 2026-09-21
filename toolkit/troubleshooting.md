@@ -183,6 +183,38 @@ stay running, give it one:
 <root>\run.cmd px --save --proxy=your-proxy:port
 ```
 
+## The Python download fails with a DNS error
+
+The tools downloaded, then `uv` could not resolve anything.
+
+This is the difference between the two halves of setup. The tool downloads go
+through Windows, which knows the proxy settings for this network and can run an
+automatic configuration script to pick one per address. `uv` does neither: it
+reads proxy environment variables and nothing else. On a network where external
+names are resolved by the proxy rather than by your machine, `uv` with no proxy
+cannot resolve anything at all.
+
+Setup asks Windows what it would use and hands `uv` the same answer, so this
+should not come up. It cannot when Windows reports no proxy is needed and the
+network still expects one, or when the proxy it names is not reachable from
+here.
+
+Give `uv` the address directly and run setup again. It is the same one your
+browser uses - Settings, Network and Internet, Proxy will show it:
+
+```powershell
+$env:HTTPS_PROXY = 'http://your-proxy:port'
+```
+
+If that reports 407 instead, the proxy wants authentication `uv` cannot give.
+That is what Px is for:
+
+```powershell
+<root>\run.cmd px --save --proxy=your-proxy:port
+<root>\run.cmd px
+$env:HTTPS_PROXY = 'http://127.0.0.1:3128'
+```
+
 ## "checksum mismatch"
 
 The file that arrived is not the file that was published. The usual cause is a

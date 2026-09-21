@@ -162,6 +162,19 @@ function Test-Tool($tool) {
 }
 
 
+function Get-SystemProxyFor($Uri) {
+    # What Windows itself would use to reach this address, including working
+    # through an automatic configuration script. Returns nothing when the
+    # answer is to go direct.
+    try {
+        $resolved = [System.Net.WebRequest]::GetSystemWebProxy().GetProxy($Uri)
+        if ($resolved -and $resolved.AbsoluteUri -ne ([Uri] $Uri).AbsoluteUri) {
+            return ($resolved.Scheme + '://' + $resolved.Authority)
+        }
+    } catch { }
+    $null
+}
+
 function Get-DownloadArgs($Uri, $OutFile) {
     # Windows already knows how to reach the internet here - directly, through a
     # configured proxy, or through whatever a PAC script decides per address -
@@ -312,7 +325,17 @@ function Invoke-Uv {
     & uv @args 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray; Write-LogLine $_ }
     $code = $LASTEXITCODE
     $ErrorActionPreference = $previous
-    if ($code -ne 0) { throw "uv $($args -join ' ') failed with exit code $code." }
+    if ($code -ne 0) {
+        $hint = ''
+        if (-not $env:HTTPS_PROXY) {
+            $hint = " If this is a DNS or connection error, uv may need the proxy address for this network: " +
+                    "set HTTPS_PROXY and run setup again."
+        } elseif ($code -ne 0) {
+            $hint = " If the proxy refused authentication, start Px and point HTTPS_PROXY at it " +
+                    "(http://127.0.0.1:3128), then run setup again."
+        }
+        throw ("uv $($args -join ' ') failed with exit code $code." + $hint)
+    }
 }
 
 function Show-MachineWideTools {
@@ -427,6 +450,26 @@ if ($answer -eq '' -or $answer -eq 'y') {
 # Point uv inside the install root, then let it fetch Python.
 $ToolkitRootOverride = $InstallRoot
 . (Join-Path $Source 'env.ps1')
+
+# uv reads proxy environment variables and nothing else. It does not consult
+# Windows' proxy settings and cannot run an automatic configuration script, so
+# on a network where those decide how traffic leaves - and where external names
+# are resolved by the proxy rather than by this machine - uv on its own cannot
+# resolve anything and fails with a DNS error. The downloads above are fine
+# because they go through Windows, which does all of that for them.
+#
+# So ask Windows what it would use for a representative address and hand uv the
+# same answer, for this install only. Where the answer is "go direct" this does
+# nothing at all.
+if (-not $env:HTTPS_PROXY) {
+    $systemProxy = Get-SystemProxyFor 'https://github.com'
+    if ($systemProxy -and (Test-ProxyReachable $systemProxy)) {
+        $env:HTTP_PROXY = $systemProxy
+        $env:HTTPS_PROXY = $systemProxy
+        Write-Host "  uv will use the proxy this network resolves to: $systemProxy"
+        Write-LogLine "uv routed through the system proxy for this network: $systemProxy"
+    }
+}
 
 Write-Host "`nPython $($config.python.version)"
 Write-Status 'python' 'installing'
