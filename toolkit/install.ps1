@@ -46,6 +46,17 @@ function Write-Status {
     try { Add-Content -Path $StatusLog -Value "STATUS|name=$Name|state=$State|detail=$Detail" -ErrorAction Stop } catch { }
 }
 
+function Write-LogLine {
+    # Anything a console user would read as it scrolls past. A caller showing a
+    # window (gui.ps1) has no other way to see it, because it runs this script
+    # hidden - so the long steps would otherwise look like nothing happening.
+    param([string] $Text)
+    if (-not $StatusLog) { return }
+    $clean = ($Text -replace '[\r\n]', ' ').Trim()
+    if (-not $clean) { return }
+    try { Add-Content -Path $StatusLog -Value "LOG|$clean" -ErrorAction Stop } catch { }
+}
+
 # A zip downloaded from the internet marks every file it extracts, and the mark
 # can stop scripts running. Clear it on our own files before doing anything else.
 Get-ChildItem (Split-Path -Parent $Source) -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
@@ -126,7 +137,7 @@ function Invoke-Uv {
     # failure, so judge these calls by their exit code instead.
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    & uv @args 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+    & uv @args 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray; Write-LogLine $_ }
     $code = $LASTEXITCODE
     $ErrorActionPreference = $previous
     if ($code -ne 0) { throw "uv $($args -join ' ') failed with exit code $code." }
@@ -207,9 +218,14 @@ $packages = @($config.python.packages)
 if ($IncludeOptional) { $packages += @($config.python.optional_packages) }
 if ($packages.Count -gt 0) {
     Write-Host "`nPython packages"
-    Write-Status 'packages' 'installing'
+    Write-Host "  this is the longest step - several hundred MB for the document libraries"
+    Write-Status 'packages' 'installing' "$($packages.Count) packages - the longest step"
+    Write-LogLine "Installing $($packages.Count) Python packages: $($packages -join ', ')"
+    Write-LogLine "This is the longest step. Several hundred MB, and uv reports below as it goes."
     Invoke-Uv pip install @packages
     Write-Status 'packages' 'installed'
+} else {
+    Write-Status 'packages' 'skipped' 'run again with the extras to add them'
 }
 
 # Keep the scripts and the manifest beside what they installed, so the folder

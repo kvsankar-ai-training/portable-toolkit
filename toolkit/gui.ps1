@@ -193,7 +193,7 @@ $rdoFull.Add_CheckedChanged($updateMode)
 
 # One row per tool in tools.json, plus python, so adding a tool there is still
 # the only edit needed - this panel does not need to know their names in advance.
-$progressNames = @($config.tools | ForEach-Object { $_.name }) + @('python')
+$progressNames = @($config.tools | ForEach-Object { $_.name }) + @('python', 'packages')
 $script:statusLabels = @{}
 
 $grpProgress = New-Object System.Windows.Forms.GroupBox
@@ -340,6 +340,9 @@ function Set-ProgressState {
         'pending'                                                    { [System.Drawing.Color]::Gray; break }
         default                                                      { [System.Drawing.Color]::SteelBlue }
     }
+    # A step that runs for minutes says why, so the row is not just "Installing..."
+    # for the whole time with no indication of what or how long.
+    if ($Detail -and $State -in 'installing', 'downloading', 'updating') { $text = "$text  $Detail" }
     $lbl.Text = $text
     $lbl.ForeColor = $color
 }
@@ -404,6 +407,8 @@ function Read-NewStatusLines {
     $new = $content.Substring($script:statusLogOffset)
     $script:statusLogOffset = $content.Length
     foreach ($line in ($new -split "`r?`n")) {
+        # Free text from the installer, so a long step is visibly doing something.
+        if ($line -match '^LOG\|(?<text>.*)$') { Write-Log $Matches.text; continue }
         if ($line -notmatch '^STATUS\|name=(?<name>[^|]*)\|state=(?<state>[^|]*)\|detail=(?<detail>.*)$') { continue }
         Set-ProgressState $Matches.name $Matches.state $Matches.detail
         Write-Log $(if ($Matches.detail) { "$($Matches.name): $($Matches.state) - $($Matches.detail)" } else { "$($Matches.name): $($Matches.state)" })
