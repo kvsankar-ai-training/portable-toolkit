@@ -13,24 +13,23 @@ WHAT TO DO
 ----------
 
 1. Right-click the zip you downloaded, choose Properties, tick Unblock, click OK.
-   Then extract it. SETUP.cmd clears that mark itself as well, so this is a
+   Then extract it. The setup clears that mark itself as well, so this is a
    belt-and-braces step rather than a required one.
 
-2. Double-click SETUP.cmd.
+2. Double-click GUI.cmd.
 
-   That installs the tools. To also get the extras - ripgrep, jq and the
-   Python libraries for Word, Excel, PowerPoint and PDF - use GUI.cmd and
-   tick "Also install the extras", or run SETUP.cmd from a command prompt
-   with the word extras:
+3. Press Install / Fix, and wait. The log on the right shows what is
+   happening; the longest step is the Python download.
 
-       SETUP.cmd extras
-
-   You can add them later; nothing is lost by starting with the tools.
-
-3. Answer the question at the end. Enter accepts yes.
+That installs the tools. To add the document libraries, ripgrep and jq as
+well, tick "Also install the extras" before pressing Install / Fix. You can
+come back and tick it later; nothing has to be undone first.
 
 It downloads about 130 MB, uses about 320 MB once installed, and takes a few
-minutes.
+minutes - roughly double that with the extras.
+
+If you would rather not use the window, SETUP.cmd does the same thing from a
+command prompt, and "SETUP.cmd extras" includes the extras.
 
 
 WHERE IT INSTALLS
@@ -105,12 +104,42 @@ administrator can change it. check.ps1 says so when it happens. Use run.cmd, or
 the full path under C:\tools, in that case.
 
 
-GUI
----
+THE WINDOW
+----------
 
-Double-click GUI.cmd instead, if you would rather not use a terminal. It
-installs, checks status, uninstalls, and configures, starts and stops Px, all
-from one window, and needs nothing beyond what Windows already provides.
+GUI.cmd is the way in. It installs, reports what is installed, removes things
+again, configures and starts Px, and launches GitHub Copilot - all from one
+window, with a log you can copy with one button. It needs nothing beyond what
+Windows already provides, so it works before Python or Node exist on the
+machine.
+
+
+LAUNCHING GITHUB COPILOT
+------------------------
+
+The "Launch (fresh settings)" button closes GitHub Copilot if it is running,
+starts Px if Px is configured and not already serving, points the app at it,
+and opens the app again.
+
+Restarting it is the point. A program keeps the environment it started with,
+so an app opened before the proxy was sorted out keeps failing until it is
+restarted, however correct the settings have since become.
+
+Two things have to be true first, and neither is something this toolkit can
+do for you:
+
+  1. The GitHub Copilot desktop app is installed. Get it from
+     https://github.com/features/ai/github-app
+     The button says "not found at the usual install location" if it is not.
+
+  2. Your GitHub account has Copilot enabled - any plan, including the free
+     one. On a work account that is usually something your organisation
+     grants rather than something you buy, and the organisation may also have
+     to permit the desktop app. This toolkit cannot tell you whether you have
+     it; the app will say so when you sign in.
+
+If the app signs in and then fails with "error sending request for url", that
+is the proxy rather than the licence. See toolkit\troubleshooting.md.
 
 
 SITE-SPECIFIC VALUES (PROXY ADDRESSES)

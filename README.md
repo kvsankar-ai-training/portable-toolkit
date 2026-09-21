@@ -13,10 +13,27 @@ or use the green **Code** button above and choose *Download ZIP*.
 
 1. Right-click the zip, choose **Properties**, tick **Unblock**, click OK, then
    extract it. Skipping this makes step 2 fail on some machines.
-2. Double-click **SETUP.cmd**.
-3. Answer the question at the end. Enter accepts yes.
+2. Double-click **GUI.cmd**.
+3. Press **Install / Fix**, and wait. The log on the right shows what is
+   happening; the longest step is the Python download.
 
-It downloads about 130 MB and uses about 320 MB once installed.
+That installs the tools. To add the document libraries, ripgrep and jq as well,
+tick **Also install the extras** before pressing Install / Fix. You can come
+back and tick it later; nothing has to be undone first.
+
+It downloads about 130 MB and uses about 320 MB once installed, or roughly
+double that with the extras.
+
+### Without a window
+
+If you would rather not use the window, or you are scripting it:
+
+```
+SETUP.cmd            the tools
+SETUP.cmd extras     the tools and the extras
+```
+
+Both do exactly what the buttons do.
 
 ## What it installs
 
@@ -61,22 +78,42 @@ win, because Windows reads the system PATH before yours and only an
 administrator can change that. `check.ps1` says so when it happens. Use
 `C:\tools\run.cmd python ...` or the full path in that case.
 
-## GUI
+## The window
 
-Double-click **GUI.cmd** instead of using a terminal. It installs, checks
-status, uninstalls, and configures, starts and stops `px`, all from one
-window, showing per-tool progress (downloading, verified, installed) as it
-goes rather than a bare console. It calls the same scripts described below;
-nothing it does is unavailable from the command line.
+**GUI.cmd** is the way in. It installs, reports what is installed, removes
+things again, configures and starts Px, and launches GitHub Copilot - all from
+one window, with a log on the right that you can copy with one button.
 
 It needs nothing beyond what Windows already provides, so it works before
-Python or Node exist on the machine, not just after.
+Python or Node exist on the machine, not only after. Everything it does is
+available from the command line too; the buttons call the same scripts.
 
-It also has a "Launch (fresh settings)" button for the GitHub Copilot desktop
-app: closes it if already running and reopens it with the current proxy
-settings, rather than whatever it happened to start with. See
-[`toolkit/troubleshooting.md`](toolkit/troubleshooting.md) for why that
-matters.
+## Launching GitHub Copilot
+
+The **Launch (fresh settings)** button closes GitHub Copilot if it is running,
+starts Px if Px is configured and not already serving, points the app at it,
+and opens the app again.
+
+Restarting it is the point. A running program keeps the environment it started
+with, so an app opened before the proxy was sorted out will keep failing until
+it is restarted, however correct the settings have since become.
+
+**Before that button is any use, two things have to be true, and neither is
+something this toolkit can do for you:**
+
+1. **The GitHub Copilot desktop app is installed.** Download it from
+   [github.com/features/ai/github-app](https://github.com/features/ai/github-app).
+   The button reports "not found at the usual install location" if it is
+   missing.
+2. **Your GitHub account has Copilot enabled** - any plan, including the free
+   one. On a work account this is usually something your organisation grants
+   rather than something you buy, and the organisation may also have to permit
+   the desktop app specifically. The toolkit cannot tell you whether you have
+   it: the app will say so when you sign in.
+
+If the app signs in but then fails with "error sending request for url", that
+is the proxy rather than the licence, and
+[`toolkit/troubleshooting.md`](toolkit/troubleshooting.md) covers it.
 
 ## Site-specific values (proxy addresses)
 
