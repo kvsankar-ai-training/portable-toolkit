@@ -55,6 +55,20 @@ function Get-SiteConfig {
     try { Get-Content $path -Raw | ConvertFrom-Json } catch { $null }
 }
 
+function Get-NetworkProxy {
+    # What Windows would use to reach the internet from here, including via an
+    # automatic configuration script. This is the same answer setup gives uv,
+    # so showing it here means the field says what will actually be used rather
+    # than asking someone to find out.
+    foreach ($probe in 'https://pypi.org', 'https://github.com') {
+        try {
+            $r = [System.Net.WebRequest]::GetSystemWebProxy().GetProxy($probe)
+            if ($r -and $r.AbsoluteUri -ne ([Uri] $probe).AbsoluteUri) { return $r.Authority }
+        } catch { }
+    }
+    $null
+}
+
 function Get-SavedPxProxy {
     # Whatever was last saved with --save, straight from px's own config file -
     # the fallback source for the proxy field so it is remembered between GUI
@@ -238,7 +252,7 @@ $lblPxState.AutoSize = $true
 $grpPx.Controls.Add($lblPxState)
 
 $lblProxy = New-Object System.Windows.Forms.Label
-$lblProxy.Text = "Proxy address (host:port)"
+$lblProxy.Text = "Proxy address (usually filled in for you)"
 $lblProxy.Location = New-Object System.Drawing.Point(15, 45)
 $lblProxy.AutoSize = $true
 $grpPx.Controls.Add($lblProxy)
@@ -248,15 +262,23 @@ $txtProxy.Location = New-Object System.Drawing.Point(15, 65)
 $txtProxy.Size = New-Object System.Drawing.Size(300, 24)
 $site = Get-SiteConfig
 $savedProxy = Get-SavedPxProxy
+# Three places it can come from, most specific first. The last is the point:
+# on a network with a proxy, this fills itself in and nobody has to ask what
+# the address is.
+$networkProxy = Get-NetworkProxy
 if ($site -and $site.proxy) { $txtProxy.Text = $site.proxy }
 elseif ($savedProxy) { $txtProxy.Text = $savedProxy }
+elseif ($networkProxy) { $txtProxy.Text = $networkProxy }
 $grpPx.Controls.Add($txtProxy)
 
 $lblSite = New-Object System.Windows.Forms.Label
 $lblSite.Location = New-Object System.Drawing.Point(325, 68)
 $lblSite.AutoSize = $true
 $lblSite.ForeColor = [System.Drawing.Color]::DarkGreen
-$lblSite.Text = if ($site -and $site.proxy) { "from site.json" } elseif ($savedProxy) { "from saved settings" } else { "" }
+$lblSite.Text = if ($site -and $site.proxy) { "from site.json" }
+                elseif ($savedProxy) { "from saved settings" }
+                elseif ($networkProxy) { "found on this network" }
+                else { "" }
 $grpPx.Controls.Add($lblSite)
 
 $chkAutoStart = New-Object System.Windows.Forms.CheckBox
