@@ -28,6 +28,16 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # without this, downloads are very slow
 
+# A proxy that demands NTLM or Kerberos answers 407 to anything that does not
+# offer credentials, and by default .NET offers none. A browser passes because
+# it uses your logged-in session; this makes the downloads below do the same.
+# Without it the very first download fails on a corporate network, which is a
+# chicken-and-egg problem, because px - the tool that would solve it - is one
+# of the things being downloaded.
+try {
+    [System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+} catch { }
+
 $Source = $PSScriptRoot
 $config = Get-Content (Join-Path $Source 'tools.json') -Raw | ConvertFrom-Json
 . (Join-Path $Source 'paths.ps1')
@@ -92,11 +102,41 @@ function Test-Tool($tool) {
     try { & $exe $tool.verify[1] *> $null; return ($LASTEXITCODE -eq 0) } catch { return $false }
 }
 
+function Get-DownloadArgs($Uri, $OutFile) {
+    # Only offer credentials when there is actually a proxy to offer them to:
+    # -ProxyUseDefaultCredentials is rejected unless -Proxy is given too. An
+    # explicit HTTPS_PROXY wins, because that is how someone points this at a
+    # running px; otherwise ask Windows what it would use for this address.
+    $splat = @{ Uri = $Uri; OutFile = $OutFile; UseBasicParsing = $true }
+    $proxy = $env:HTTPS_PROXY
+    if (-not $proxy) {
+        try {
+            $resolved = [System.Net.WebRequest]::GetSystemWebProxy().GetProxy($Uri)
+            if ($resolved -and $resolved.AbsoluteUri -ne $Uri) { $proxy = $resolved.AbsoluteUri }
+        } catch { }
+    }
+    if ($proxy) {
+        $splat.Proxy = $proxy
+        $splat.ProxyUseDefaultCredentials = $true
+    }
+    $splat
+}
+
 function Install-Tool($tool) {
     Write-Status $tool.name 'downloading'
     $zip = Join-Path $env:TEMP "portable-toolkit-$($tool.name).zip"
     Write-Host "  downloading $($tool.url)"
-    Invoke-WebRequest -Uri $tool.url -OutFile $zip -UseBasicParsing
+    try {
+        $download = Get-DownloadArgs $tool.url $zip
+        Invoke-WebRequest @download
+    } catch {
+        if ("$($_.Exception.Message)" -match '407|Proxy Authentication') {
+            throw ("Proxy authentication failed (407) downloading $($tool.name). Your proxy wants credentials " +
+                   "this script cannot supply. If px is installed and configured, start it first and set " +
+                   "HTTPS_PROXY to http://127.0.0.1:3128, then run setup again. See toolkit\troubleshooting.md.")
+        }
+        throw
+    }
 
     # Refuse to install anything whose contents do not match the published hash.
     $actual = (Get-FileHash $zip -Algorithm SHA256).Hash
@@ -199,6 +239,16 @@ foreach ($tool in $config.tools) {
 # Point uv inside the install root, then let it fetch Python.
 $ToolkitRootOverride = $InstallRoot
 . (Join-Path $Source 'env.ps1')
+
+# uv has no way to answer an NTLM challenge, so unlike the downloads above it
+# cannot use the logged-in session. If px is already running, send uv through
+# it for the rest of this install; px answers the challenge on uv's behalf.
+if ((Get-Process px -ErrorAction SilentlyContinue) -and -not $env:HTTPS_PROXY) {
+    $env:HTTP_PROXY = 'http://127.0.0.1:3128'
+    $env:HTTPS_PROXY = 'http://127.0.0.1:3128'
+    Write-Host "  routing uv through the running px on 127.0.0.1:3128"
+    Write-LogLine "px is running, so uv is routed through it for this install."
+}
 
 Write-Host "`nPython $($config.python.version)"
 Write-Status 'python' 'installing'

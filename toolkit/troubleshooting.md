@@ -124,6 +124,34 @@ a custom certificate were configured at some point while diagnosing a
 different problem, remove the certificate variables first and see if the
 proxy alone is now enough - it may be the underlying issue px already solved.
 
+## Setup fails with 407, and it worked the last time
+
+A 407 means the proxy wants credentials. Two things can cause it to appear
+between one install and the next.
+
+**Px was stopped.** If your network needs Px, it is how everything here
+reaches the internet. Older versions of `uninstall.ps1` stopped and
+deregistered it even on a plain uninstall, so the next install had nothing to
+authenticate through. It is now left alone unless you ask for a full removal.
+Start it again:
+
+```powershell
+<root>\run.cmd px
+```
+
+**The proxy wants NTLM or Kerberos.** Setup now offers your logged-in Windows
+session when it downloads, which is what a browser does, so this should pass
+without Px. `uv` cannot do that - it has no way to answer the challenge - so
+the Python download still needs Px running. Setup detects a running Px and
+routes `uv` through it automatically.
+
+If it still fails, configure Px and try again:
+
+```powershell
+<root>\run.cmd px --save --proxy=your-proxy:port
+<root>\run.cmd px
+```
+
 ## "checksum mismatch"
 
 The file that arrived is not the file that was published. The usual cause is a
@@ -185,8 +213,10 @@ failed, the account cannot write to either location, which is worth reporting.
 <root>\toolkit\uninstall.ps1
 ```
 
-That removes the toolkit's user PATH entries and, if Px was registered to start
-at logon, stops it and deregisters it. It leaves the files alone.
+That removes the toolkit's user PATH entries and leaves the files alone. It
+also leaves Px running: on a network that needs it, Px is how the next install
+reaches the internet at all, so stopping it here would make reinstalling fail
+with a 407.
 
 To delete the installed tools as well, add `-Full`:
 
@@ -195,7 +225,8 @@ To delete the installed tools as well, add `-Full`:
 ```
 
 That removes every tool and the Python environment, which is nearly all of the
-disk space, and with it anything you installed into that Python. The toolkit's
+disk space, and with it anything you installed into that Python. It also stops
+Px and deregisters it from starting at logon, because its files are going too. The toolkit's
 own scripts stay, because the script doing the deleting is one of them, so the
 last step - deleting the folder - is still yours.
 

@@ -328,6 +328,7 @@ function Set-ProgressState {
         'updating'          { 'Updating...' }
         'updated'           { 'Done' }
         'skipped'           { 'Skipped' }
+        'left-running'      { 'Left running - needed to reinstall' }
         'done'              { 'Done' }
         'pending'           { 'Waiting...' }
         'error'             { "Something went wrong: $Detail" }

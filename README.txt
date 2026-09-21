@@ -60,9 +60,13 @@ To undo everything:
 
     C:\tools\toolkit\uninstall.ps1
 
-That removes the PATH entries, stops Px and deregisters it if it was set up,
-then tells you to delete the folder. Run it before deleting C:\tools, not
-after.
+That removes the PATH entries and tells you to delete the folder. Run it
+before deleting C:\tools, not after.
+
+Px is deliberately left running, because it is how this machine reaches the
+internet through an authenticating proxy - stopping it would break the next
+install. Use the Full option in GUI.cmd, or uninstall.ps1 -Full, to stop and
+deregister it along with everything else.
 
 
 USING THE TOOLS

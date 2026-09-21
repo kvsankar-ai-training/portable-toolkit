@@ -43,21 +43,26 @@ if (($current -split ';').Count -ne $kept.Count) {
     Write-Status 'path' 'clean'
 }
 
-# Px, if it was configured, is registered to start at logon and may be running.
-# That registration lives outside this folder and survives deleting it, so the
-# folder must not be deleted before this has run.
+# Px is left alone unless the files are going too. It is the machine's route
+# through an authenticating proxy, so stopping it on a plain uninstall breaks
+# the next install - which has to download everything through that same proxy.
+# Its logon registration lives outside this folder and survives deleting it, so
+# a -Full removal has to deregister it before the folder goes.
 $px = Join-Path $Root 'px\px.exe'
-if (Test-Path $px) {
+if (-not (Test-Path $px)) {
+    Write-Status 'px' 'absent'
+} elseif ($Full) {
     if (Get-Process px -ErrorAction SilentlyContinue) {
         Write-Host "Stopping Px..."
         & $px --quit *> $null
     }
     # Harmless when it was never registered; px reports nothing to remove.
     & $px --uninstall *> $null
-    Write-Host "Deregistered Px from starting at logon." -ForegroundColor Green
+    Write-Host "Stopped Px and deregistered it from starting at logon." -ForegroundColor Green
     Write-Status 'px' 'deregistered'
 } else {
-    Write-Status 'px' 'absent'
+    Write-Host "Left Px running. Reinstalling needs it; use -Full to remove it too."
+    Write-Status 'px' 'left-running'
 }
 
 if ($Full) {
