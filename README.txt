@@ -154,5 +154,12 @@ what it looks like:
 IF SOMETHING GOES WRONG
 -----------------------
 
-Read toolkit\troubleshooting.md. If a policy on your machine blocked something,
-that is worth reporting rather than working around.
+If it is a network or proxy problem, run this first and send the output:
+
+    C:\tools\toolkit\network-check.ps1
+
+It changes nothing, and reports how this machine reaches the internet and how
+the installer does - which are not the same route, and can disagree.
+
+Otherwise read toolkit\troubleshooting.md. If a policy on your machine blocked
+something, that is worth reporting rather than working around.

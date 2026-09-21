@@ -183,6 +183,25 @@ stay running, give it one:
 <root>\run.cmd px --save --proxy=your-proxy:port
 ```
 
+## Any network failure: find out what is actually happening first
+
+Setup reaches the network two ways and they can disagree, so guessing wastes
+time. This reports both, changes nothing, and needs no arguments:
+
+```powershell
+<root>\toolkit\network-check.ps1
+```
+
+It shows this machine's proxy settings, what Windows resolves for several
+addresses, whether those proxies answer, whether Windows can reach the sites
+the tools come from, whether `uv` can reach them with and without a proxy, and
+what state Px is in.
+
+Send the whole output when reporting a problem. The useful distinction it draws
+is between Windows reaching a site and `uv` reaching it: the tools download
+through Windows, `uv` does not, and a failure in one and not the other points
+straight at the proxy handling rather than at the network.
+
 ## The Python download fails with a DNS error
 
 The tools downloaded, then `uv` could not resolve anything.
