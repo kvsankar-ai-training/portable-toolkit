@@ -12,7 +12,12 @@ Running it again only installs what is missing.
 param(
     # Overrides install.root from tools.json. Exists so the shipped manifest can
     # be tested without editing it, which is how a bad default slipped through.
-    [string] $Root
+    [string] $Root,
+
+    # Skips the "Add them? [Y/n]" prompt and proceeds as if Enter was pressed,
+    # so this can be run from something other than an interactive console, such
+    # as gui.ps1. Everything else behaves exactly the same.
+    [switch] $Unattended
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,6 +26,17 @@ $ProgressPreference = 'SilentlyContinue'   # without this, downloads are very sl
 $Source = $PSScriptRoot
 $config = Get-Content (Join-Path $Source 'tools.json') -Raw | ConvertFrom-Json
 . (Join-Path $Source 'paths.ps1')
+
+# A parseable line per step, beside install.ps1 itself so it exists regardless
+# of where the install root ends up. A caller that wants granular progress
+# (gui.ps1) tails this file; a console run ignores it and reads Write-Host as
+# always. Reset on every run so a caller never reads a previous run's lines.
+$StatusLog = Join-Path $Source 'install.status.log'
+Set-Content -Path $StatusLog -Value $null
+function Write-Status {
+    param([string] $Name, [string] $State, [string] $Detail = '')
+    Add-Content -Path $StatusLog -Value "STATUS|name=$Name|state=$State|detail=$Detail"
+}
 
 # A zip downloaded from the internet marks every file it extracts, and the mark
 # can stop scripts running. Clear it on our own files before doing anything else.
@@ -58,6 +74,7 @@ function Test-Tool($tool) {
 }
 
 function Install-Tool($tool) {
+    Write-Status $tool.name 'downloading'
     $zip = Join-Path $env:TEMP "portable-toolkit-$($tool.name).zip"
     Write-Host "  downloading $($tool.url)"
     Invoke-WebRequest -Uri $tool.url -OutFile $zip -UseBasicParsing
@@ -69,6 +86,7 @@ function Install-Tool($tool) {
         throw "$($tool.name): checksum mismatch. Expected $($tool.sha256), got $actual."
     }
     Write-Host "  checksum matches the one published at $($tool.sha256_source)"
+    Write-Status $tool.name 'verified'
 
     $dest = Join-Path $InstallRoot $tool.target
     if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
@@ -87,6 +105,7 @@ function Install-Tool($tool) {
     Remove-Item $zip -Force
     if (-not (Test-Tool $tool)) { throw "$($tool.name): installed, but it does not run." }
     Write-Host "  installed and runs" -ForegroundColor Green
+    Write-Status $tool.name 'installed'
 }
 
 function Invoke-Uv {
@@ -128,15 +147,22 @@ function Show-MachineWideTools {
 }
 
 Write-Host "`nportable-toolkit $($config.version)"
+Write-Status 'overall' 'starting'
 
 $InstallRoot = Select-InstallRoot
 Write-Host "`nInstalling into $InstallRoot`n"
 Show-MachineWideTools
 
+try {
+
 foreach ($tool in $config.tools) {
     Write-Host "$($tool.name) $($tool.version)"
-    if (Test-Tool $tool) { Write-Host "  already installed" -ForegroundColor DarkGray }
-    else { Install-Tool $tool }
+    if (Test-Tool $tool) {
+        Write-Host "  already installed" -ForegroundColor DarkGray
+        Write-Status $tool.name 'already-installed'
+    } else {
+        Install-Tool $tool
+    }
 }
 
 # Point uv inside the install root, then let it fetch Python.
@@ -144,6 +170,7 @@ $ToolkitRootOverride = $InstallRoot
 . (Join-Path $Source 'env.ps1')
 
 Write-Host "`nPython $($config.python.version)"
+Write-Status 'python' 'installing'
 Invoke-Uv python install $config.python.version
 $envDir = Join-Path $InstallRoot $config.python.environment
 if (Test-Path (Join-Path $envDir 'Scripts\python.exe')) {
@@ -154,10 +181,16 @@ if (Test-Path (Join-Path $envDir 'Scripts\python.exe')) {
     Invoke-Uv venv $envDir --python $config.python.version --seed
 }
 Write-Host "  one shared environment at $envDir" -ForegroundColor Green
+Write-Status 'python' 'installed'
 
 if ($config.python.packages.Count -gt 0) {
     Write-Host "`nPackages"
     Invoke-Uv pip install @($config.python.packages)
+}
+
+} catch {
+    Write-Status 'overall' 'error' $_.Exception.Message
+    throw
 }
 
 # Keep the scripts and the manifest beside what they installed, so the folder
@@ -170,7 +203,7 @@ if ($Source -ne $destToolkit) {
     New-Item -ItemType Directory $destToolkit | Out-Null
     Copy-Item (Join-Path $Source '*') $destToolkit -Recurse -Force
     Move-Item (Join-Path $destToolkit 'run.cmd') (Join-Path $InstallRoot 'run.cmd') -Force
-    foreach ($f in 'README.txt', 'SKILL.md') {
+    foreach ($f in 'README.txt', 'SKILL.md', 'GUI.cmd') {
         $from = Join-Path (Split-Path -Parent $Source) $f
         if (Test-Path $from) { Copy-Item $from $InstallRoot -Force }
     }
@@ -182,26 +215,38 @@ Invoke-Uv cache clean
 
 Write-Host "`nInstalled." -ForegroundColor Green
 
-# The one change outside the install folder.
-$wanted = Get-ToolkitPaths $InstallRoot $config
+# The one change outside the install folder. Rebuilt from scratch each run,
+# rather than only appending whatever is missing, so re-running this also
+# fixes the order if it was ever wrong - which is exactly what happened when
+# px was added after everything else: it landed ahead of the toolkit's own
+# Python instead of after it. $allKnown is every folder tools.json has ever
+# named, including ones like px that are no longer meant to persist, so a
+# stale entry from before that changed also gets cleaned up here.
+$wanted = Get-PersistentToolkitPaths $InstallRoot $config
+$allKnown = Get-ToolkitPaths $InstallRoot $config
 Write-Host "`nThe tools work by name only if this folder is on your PATH."
 Write-Host "Without it, an assistant running 'python' or 'node' will not find them."
 Write-Host "These entries would be added to your user PATH, not the system one:"
 $wanted | ForEach-Object { Write-Host "  $_" }
 
-$answer = Read-Host "`nAdd them? [Y/n]"
+$answer = if ($Unattended) { 'y' } else { Read-Host "`nAdd them? [Y/n]" }
+Write-Status 'path' 'updating'
 if ($answer -eq '' -or $answer -eq 'y') {
     $current = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $missing = $wanted | Where-Object { ($current -split ';') -notcontains $_ }
-    if ($missing) {
-        [Environment]::SetEnvironmentVariable('Path', (($missing -join ';') + ';' + $current), 'User')
+    $kept = ($current -split ';') | Where-Object { $_ -and ($allKnown -notcontains $_) }
+    $rebuilt = ($wanted + $kept) -join ';'
+    if ($rebuilt -ne $current) {
+        [Environment]::SetEnvironmentVariable('Path', $rebuilt, 'User')
         Write-Host "Added." -ForegroundColor Green
     } else { Write-Host "Already there." }
     Write-Host "Close and reopen any terminal or assistant for it to take effect." -ForegroundColor Yellow
+    Write-Status 'path' 'updated'
 } else {
     Write-Host "Not added. Use $InstallRoot\run.cmd <command> instead, or run toolkit\env.ps1 in a window."
+    Write-Status 'path' 'skipped'
 }
 
 Write-Host "`nEverything is in $InstallRoot. To check it:  $InstallRoot\toolkit\check.ps1"
 Write-Host "To remove it:                              $InstallRoot\toolkit\uninstall.ps1"
 Write-Host "The folder you extracted is no longer needed and can be deleted.`n"
+Write-Status 'overall' 'done'

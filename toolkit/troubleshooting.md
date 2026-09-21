@@ -6,7 +6,7 @@ The window closed before you could read it. Open PowerShell in the toolkit
 folder and run the installer directly so the error stays on screen:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 ## "cannot be loaded because running scripts is disabled on this system"
@@ -47,6 +47,82 @@ $env:HTTPS_PROXY = 'http://your-proxy:8080'
 
 A certificate error usually means the proxy is inspecting traffic and
 re-signing it. Do not disable certificate validation. Report it.
+
+## The proxy answers with 407, and setting HTTPS_PROXY is not enough
+
+Some corporate proxies require NTLM or Kerberos authentication on every
+connection, not just a proxy address. Tools that only read `HTTPS_PROXY` have
+no way to answer that challenge and fail even though the address is correct.
+Windows tools that use the system network stack (a browser, curl, PowerShell's
+`Invoke-WebRequest`) can pass this silently using your logged-in credentials;
+many command-line tools cannot.
+
+`px`, included in this toolkit, sits between such a tool and the real proxy,
+answers the authentication challenge on your behalf using your Windows session,
+and presents a plain, unauthenticated proxy on `127.0.0.1:3128`.
+
+Configure it once with your proxy's address:
+
+```powershell
+run.cmd px --save --proxy=your-proxy:port
+```
+
+Register it to start automatically at logon:
+
+```powershell
+run.cmd px --install
+```
+
+Then point tools at it instead of the real proxy:
+
+```powershell
+$env:HTTPS_PROXY = 'http://127.0.0.1:3128'
+```
+
+This relies on your own Windows credentials and changes nothing about what the
+proxy allows through; it only lets a tool clear an authentication step your
+session would have cleared automatically anyway. If in doubt, ask whoever runs
+the proxy before installing it to start automatically.
+
+`GUI.cmd` does all three of the above (save, start, stop) from buttons, and
+pre-fills the address if a `toolkit\site.json` is present. See
+[`README.md`](../README.md#site-specific-values-proxy-addresses) for where
+that file comes from.
+
+## GitHub Copilot fails with "error sending request for url", even with the proxy set correctly
+
+If the direct proxy is configured correctly (confirmed reachable with `curl`)
+and GitHub Copilot's desktop app still fails to sign in or create a session
+with this error, the cause is usually not authentication but the proxy's TLS
+inspection itself: some Rust-based clients do not handle the certificate
+swap an inspecting proxy performs the same way a browser or `curl` does.
+
+Routing through `px` instead of the proxy directly has resolved this in
+practice, even though `px` was originally added here only for NTLM/Kerberos
+authentication:
+
+```powershell
+$env:HTTP_PROXY = 'http://127.0.0.1:3128'
+$env:HTTPS_PROXY = 'http://127.0.0.1:3128'
+```
+
+Then fully close and reopen GitHub Copilot's desktop app so it picks up the
+change - `GUI.cmd` has a "Launch (fresh settings)" button under GitHub Copilot
+desktop app that does exactly this: closes any running copy and reopens it
+with the current proxy settings, rather than whatever it started with.
+
+Do not also set `NODE_EXTRA_CA_CERTS` or `SSL_CERT_FILE` to a custom
+certificate file alongside this. Windows already trusts your organisation's
+inspection certificate through its own certificate store once IT has deployed
+it, and once traffic is routed through `px` that is what actually gets used -
+pointing these variables at a manually exported certificate file instead
+replaces that working, complete trust chain with whatever got exported, which
+is easy to get subtly wrong (for example, a certificate authority is not just
+one file - exporting only the root and not the intermediate certificate
+authorities underneath it produces exactly this failure). If both a proxy and
+a custom certificate were configured at some point while diagnosing a
+different problem, remove the certificate variables first and see if the
+proxy alone is now enough - it may be the underlying issue px already solved.
 
 ## "checksum mismatch"
 

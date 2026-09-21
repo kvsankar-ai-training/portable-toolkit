@@ -1,8 +1,10 @@
 PORTABLE TOOLKIT
 ================
 
-This installs Git, Node, uv and Python without administrator rights and without
-a software request.
+This installs Git, Node, uv, Python and Px without administrator rights and
+without a software request. Px is a proxy helper; it installs alongside the
+others but only does something once you configure it (see
+toolkit\troubleshooting.md).
 
 
 WHAT TO DO
@@ -16,7 +18,7 @@ WHAT TO DO
 
 3. Answer the question at the end. Enter accepts yes.
 
-It downloads about 110 MB, uses about 290 MB once installed, and takes a few
+It downloads about 130 MB, uses about 320 MB once installed, and takes a few
 minutes.
 
 
@@ -79,6 +81,24 @@ If your machine already has Python, Node or Git installed for all users, those
 win, because Windows reads the system PATH before yours and only an
 administrator can change it. check.ps1 says so when it happens. Use run.cmd, or
 the full path under C:\tools, in that case.
+
+
+GUI
+---
+
+Double-click GUI.cmd instead, if you would rather not use a terminal. It
+installs, checks status, uninstalls, and configures, starts and stops Px, all
+from one window, and needs nothing beyond what Windows already provides.
+
+
+SITE-SPECIFIC VALUES (PROXY ADDRESSES)
+---------------------------------------
+
+This repo names no specific organisation's proxy. If Px needs a real address
+for your network, put it in toolkit\site.json (copy toolkit\site.example.json
+and fill it in). The GUI reads it to pre-fill the proxy field. site.json is
+not part of the public repo; get it from whoever runs your training or set up
+your network, separately from this download.
 
 
 IF SOMETHING GOES WRONG

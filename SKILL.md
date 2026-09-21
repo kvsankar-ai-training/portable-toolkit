@@ -77,6 +77,41 @@ Add an entry to `toolkit\tools.json` with its version, URL, the SHA-256
 published by whoever distributes it, and a command that proves it runs. Do not
 edit `install.ps1` or the PATH handling; both are driven by the manifest.
 
+## Corporate NTLM proxy (Px)
+
+`px` is installed like the other tools but is not used like them: it is an
+NTLM/Kerberos proxy relay for machines where a corporate proxy demands
+authentication that most command-line tools cannot supply. It does nothing
+until configured and started.
+
+```
+run.cmd px --save --proxy=your-proxy:port
+run.cmd px --install
+```
+
+The second command registers it to start at logon. After that, point tools at
+`http://127.0.0.1:3128` instead of the real proxy address. Only set this up if
+a tool is actually failing against an authenticating proxy; do not do it by
+default.
+
+`GUI.cmd` does the same three actions (save, start, stop) from buttons, for a
+participant who would rather not type commands. Prefer pointing someone there
+over walking them through the CLI, unless they ask for the commands directly.
+
+`GUI.cmd` can also relaunch the GitHub Copilot desktop app itself, closing any
+running copy first so the new one picks up current proxy settings instead of
+whatever it started with. Point someone there if Copilot's desktop app fails
+to sign in or create a session with a proxy configured, even if `px` already
+looks correctly set up - the running copy may simply predate the fix.
+
+## Site-specific values
+
+This repo is generic on purpose: no proxy address or other organisation-specific
+value belongs in any tracked file. If one is needed, it goes in
+`toolkit\site.json` (git-ignored, see `toolkit\site.example.json` for the
+shape), distributed separately from the repo. Never add a real value to
+`site.example.json`, `tools.json`, or any other tracked file.
+
 ## What not to do
 
 - Do not install anything outside the toolkit folder.

@@ -1,8 +1,8 @@
 # portable-toolkit
 
-Installs Git, Node, uv and Python on a Windows machine without administrator
-rights and without a software request. Everything lands in one folder, and one
-command removes it again.
+Installs Git, Node, uv, Python and Px on a Windows machine without
+administrator rights and without a software request. Everything lands in one
+folder, and one command removes it again.
 
 ## Download
 
@@ -16,7 +16,7 @@ or use the green **Code** button above and choose *Download ZIP*.
 2. Double-click **SETUP.cmd**.
 3. Answer the question at the end. Enter accepts yes.
 
-It downloads about 110 MB and uses about 290 MB once installed.
+It downloads about 130 MB and uses about 320 MB once installed.
 
 ## What it installs
 
@@ -26,9 +26,15 @@ It downloads about 110 MB and uses about 290 MB once installed.
 | Node | 24.21.0 | `SHASUMS256.txt` on nodejs.org |
 | Git (MinGit) | 2.55.0.5 | the SHA-256 table in the Git for Windows release notes |
 | Python | 3.13 | fetched by uv |
+| Px | 0.11.0 | the `.sha256` published beside the release asset |
 
 Every download is checked against the hash its publisher recorded, and the
 install stops rather than continuing if one does not match.
+
+Px is an NTLM/Kerberos proxy relay. It is only useful behind a corporate proxy
+that needs authentication a tool cannot supply itself, and it does nothing
+until you configure and start it. See
+[`toolkit/troubleshooting.md`](toolkit/troubleshooting.md) for how.
 
 ## What it changes on your machine
 
@@ -55,6 +61,33 @@ win, because Windows reads the system PATH before yours and only an
 administrator can change that. `check.ps1` says so when it happens. Use
 `C:\tools\run.cmd python ...` or the full path in that case.
 
+## GUI
+
+Double-click **GUI.cmd** instead of using a terminal. It installs, checks
+status, uninstalls, and configures, starts and stops `px`, all from one
+window, showing per-tool progress (downloading, verified, installed) as it
+goes rather than a bare console. It calls the same scripts described below;
+nothing it does is unavailable from the command line.
+
+It needs nothing beyond what Windows already provides, so it works before
+Python or Node exist on the machine, not just after.
+
+It also has a "Launch (fresh settings)" button for the GitHub Copilot desktop
+app: closes it if already running and reopens it with the current proxy
+settings, rather than whatever it happened to start with. See
+[`toolkit/troubleshooting.md`](toolkit/troubleshooting.md) for why that
+matters.
+
+## Site-specific values (proxy addresses)
+
+`toolkit/tools.json` and the rest of this repo are generic on purpose; nothing
+here names any specific organisation's proxy. If your network needs `px`
+configured with a real address, put it in `toolkit/site.json` (copy
+`toolkit/site.example.json` and fill it in), which the GUI reads to pre-fill
+the proxy field. `site.json` is git-ignored: distribute it separately from the
+public repo, to whoever needs it, through however your organisation shares
+internal files.
+
 ## Reading it before you run it
 
 Everything is plain text and short enough to read in full:
@@ -64,6 +97,8 @@ Everything is plain text and short enough to read in full:
 - `toolkit/env.ps1` — the paths and variables it sets, for one process only
 - `toolkit/check.ps1` — diagnostic, changes nothing
 - `toolkit/uninstall.ps1` — removes the PATH entries
+- `toolkit/gui.ps1` — the GUI; every action in it calls the scripts above
+- `toolkit/site.example.json` — the template for a site-specific `site.json`
 
 Adding a tool is an edit to `tools.json`, not to any script.
 

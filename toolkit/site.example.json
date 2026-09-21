@@ -1,0 +1,4 @@
+{
+  "_comment": "Optional. Copy this file to site.json beside it and fill in your organisation's proxy. site.json is gitignored and never distributed through the public repo; hand it out separately (email, internal file share) to whoever runs the training. The GUI and gui.ps1 read site.json, if present, to pre-fill the proxy field. Everything here is optional; leave a value blank if it does not apply.",
+  "proxy": "proxy.example.com:8080"
+}

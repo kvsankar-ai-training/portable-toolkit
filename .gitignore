@@ -1,0 +1,9 @@
+# Site-specific values (proxy addresses, etc.) do not belong in a public repo.
+# Distribute toolkit/site.json separately from whoever runs the training.
+# toolkit/site.example.json, the template, is tracked and stays generic.
+toolkit/site.json
+
+# Runtime logs install.ps1/uninstall.ps1 write beside themselves, read by
+# gui.ps1 for live progress. Never meant to be committed.
+toolkit/install.status.log
+toolkit/uninstall.status.log
