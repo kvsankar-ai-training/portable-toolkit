@@ -20,9 +20,10 @@ WHAT TO DO
 
    That installs the tools. To also get the extras - ripgrep, jq and the
    Python libraries for Word, Excel, PowerPoint and PDF - use GUI.cmd and
-   choose Full, or run SETUP.cmd from a command prompt with the word full:
+   tick "Also install the extras", or run SETUP.cmd from a command prompt
+   with the word extras:
 
-       SETUP.cmd full
+       SETUP.cmd extras
 
    You can add them later; nothing is lost by starting with the tools.
 
@@ -67,7 +68,7 @@ before deleting C:\tools, not after.
 
 Px is deliberately left running, because it is how this machine reaches the
 internet through an authenticating proxy - stopping it would break the next
-install. Use the Full option in GUI.cmd, or uninstall.ps1 -Full, to stop and
+install. Use Remove everything in GUI.cmd, or uninstall.ps1 -Full, to stop and
 deregister it along with everything else.
 
 
@@ -140,9 +141,10 @@ extras are everything beyond that:
              pypdf        splitting, merging and rearranging PDFs
              Pillow       images
 
-Install them at any time: GUI.cmd, choose Full, then Install / Fix. Or:
+Install them at any time: GUI.cmd, tick the extras box, then Install / Fix.
+Or:
 
-    SETUP.cmd full
+    SETUP.cmd extras
 
 Reading a document is one call. The assistant will write the script; this is
 what it looks like:

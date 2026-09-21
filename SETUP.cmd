@@ -5,7 +5,7 @@ rem Installs the tools. Add the word "full" to also install the extras:
 rem the document libraries, ripgrep and jq.
 rem
 rem   SETUP.cmd          tools only
-rem   SETUP.cmd full     tools and extras
+rem   SETUP.cmd extras   tools and extras
 rem
 rem GUI.cmd offers the same choice with buttons.
 

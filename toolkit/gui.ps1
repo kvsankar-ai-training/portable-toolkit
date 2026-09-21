@@ -204,52 +204,40 @@ $grpSetup.Location = New-Object System.Drawing.Point(12, 68)
 $grpSetup.Size = New-Object System.Drawing.Size(520, 96)
 $form.Controls.Add($grpSetup)
 
-# One choice, used by both buttons below: it decides how much Install puts on
-# and how much Uninstall takes off, so there is never a question of which mode
-# a given button is in.
-$rdoBasic = New-Object System.Windows.Forms.RadioButton
-$rdoBasic.Text = "Basic - the tools"
-$rdoBasic.Location = New-Object System.Drawing.Point(15, 20)
-$rdoBasic.Size = New-Object System.Drawing.Size(140, 20)
-$rdoBasic.Checked = $true
-$grpSetup.Controls.Add($rdoBasic)
-
-$rdoFull = New-Object System.Windows.Forms.RadioButton
-$rdoFull.Text = "Full - also document libraries, ripgrep and jq"
-$rdoFull.Location = New-Object System.Drawing.Point(165, 20)
-$rdoFull.Size = New-Object System.Drawing.Size(330, 20)
-$grpSetup.Controls.Add($rdoFull)
+# The extras are added on top of the tools, not installed instead of them, so
+# this is a tick box rather than a choice between two modes. Leaving it unticked
+# and running again later adds them; nothing has to be undone first.
+$chkExtras = New-Object System.Windows.Forms.CheckBox
+$chkExtras.Text = "Also install the extras - document libraries, ripgrep and jq"
+$chkExtras.Location = New-Object System.Drawing.Point(15, 20)
+$chkExtras.Size = New-Object System.Drawing.Size(490, 20)
+$grpSetup.Controls.Add($chkExtras)
 
 $btnInstall = New-Object System.Windows.Forms.Button
 $btnInstall.Text = "Install / Fix"
 $btnInstall.Location = New-Object System.Drawing.Point(15, 48)
-$btnInstall.Size = New-Object System.Drawing.Size(130, 28)
+$btnInstall.Size = New-Object System.Drawing.Size(120, 28)
 $grpSetup.Controls.Add($btnInstall)
 
 $btnCheck = New-Object System.Windows.Forms.Button
 $btnCheck.Text = "Show details"
-$btnCheck.Location = New-Object System.Drawing.Point(155, 48)
-$btnCheck.Size = New-Object System.Drawing.Size(110, 28)
+$btnCheck.Location = New-Object System.Drawing.Point(143, 48)
+$btnCheck.Size = New-Object System.Drawing.Size(105, 28)
 $grpSetup.Controls.Add($btnCheck)
 
+# Two buttons rather than one whose meaning depends on a setting elsewhere on
+# the form. What each does is in its own label.
 $btnUninstall = New-Object System.Windows.Forms.Button
 $btnUninstall.Text = "Uninstall"
-$btnUninstall.Location = New-Object System.Drawing.Point(275, 48)
-$btnUninstall.Size = New-Object System.Drawing.Size(100, 28)
+$btnUninstall.Location = New-Object System.Drawing.Point(256, 48)
+$btnUninstall.Size = New-Object System.Drawing.Size(95, 28)
 $grpSetup.Controls.Add($btnUninstall)
 
-$lblMode = New-Object System.Windows.Forms.Label
-$lblMode.Location = New-Object System.Drawing.Point(385, 54)
-$lblMode.AutoSize = $true
-$lblMode.ForeColor = [System.Drawing.Color]::Gray
-$grpSetup.Controls.Add($lblMode)
-
-$updateMode = {
-    $lblMode.Text = if ($rdoFull.Checked) { "Uninstall also deletes files" } else { "Uninstall undoes settings only" }
-}
-$rdoBasic.Add_CheckedChanged($updateMode)
-$rdoFull.Add_CheckedChanged($updateMode)
-& $updateMode
+$btnRemoveAll = New-Object System.Windows.Forms.Button
+$btnRemoveAll.Text = "Remove everything"
+$btnRemoveAll.Location = New-Object System.Drawing.Point(359, 48)
+$btnRemoveAll.Size = New-Object System.Drawing.Size(145, 28)
+$grpSetup.Controls.Add($btnRemoveAll)
 
 # ---- status panel ------------------------------------------------------------
 
@@ -302,7 +290,7 @@ function Add-StatusColumn($Names, $Heading, $X, $Width) {
 }
 
 Add-StatusColumn $basicNames 'Basic' 15 240
-Add-StatusColumn $fullNames  'Full'  270 235
+Add-StatusColumn $fullNames  'Extras' 270 235
 
 # ---- px group ---------------------------------------------------------------
 
@@ -479,7 +467,7 @@ function Set-ProgressState {
         'updating'          { 'Updating...' }
         'updated'           { 'Done' }
         'skipped'           { 'Skipped' }
-        'not-asked-for'     { 'Not installed - choose Full to add' }
+        'not-asked-for'     { 'Not installed - tick the extras box to add' }
         'kept'              { 'Already installed, left as it is' }
         'left-running'      { 'Left running - needed to reinstall' }
         'done'              { 'Done' }
@@ -592,6 +580,7 @@ function Read-NewStatusLines {
 function Start-Tracked($scriptPath, $extraArgs, $statusLogPath, $label) {
     $btnInstall.Enabled = $false
     $btnUninstall.Enabled = $false
+    $btnRemoveAll.Enabled = $false
     foreach ($lbl in $script:statusLabels.Values) { $lbl.Text = 'Waiting...'; $lbl.ForeColor = [System.Drawing.Color]::Gray }
     Remove-Item $statusLogPath -Force -ErrorAction SilentlyContinue
     $script:activeStatusLog = $statusLogPath
@@ -633,6 +622,7 @@ $timer.Add_Tick({
         $script:activeStatusLog = $null
         $btnInstall.Enabled = $true
         $btnUninstall.Enabled = $true
+        $btnRemoveAll.Enabled = $true
     }
     Update-Status
 })
@@ -644,28 +634,31 @@ $btnInstall.Add_Click({
     # The only copy guaranteed to exist before a first install is this one.
     $scriptPath = Join-Path $PSScriptRoot 'install.ps1'
     $setupArgs = @('-Unattended')
-    if ($rdoFull.Checked) { $setupArgs += '-IncludeOptional' }
-    $label = if ($rdoFull.Checked) { 'Setting things up, with the extras' } else { 'Setting things up' }
+    if ($chkExtras.Checked) { $setupArgs += '-IncludeOptional' }
+    $label = if ($chkExtras.Checked) { 'Setting things up, with the extras' } else { 'Setting things up' }
     Start-Tracked $scriptPath $setupArgs (Join-Path $PSScriptRoot 'install.status.log') $label
 })
 
 $btnUninstall.Add_Click({
+    # Undoes what setup changed outside its own folder and leaves the files, so
+    # reinstalling is quick and Px keeps serving.
+    $installed = Join-Path $script:Root 'toolkit\uninstall.ps1'
+    if (-not (Test-Path $installed)) { Write-Log "Nothing to undo - it is not installed."; return }
+    Start-Tracked $installed @() (Join-Path $script:Root 'toolkit\uninstall.status.log') 'Undoing the settings'
+})
+
+$btnRemoveAll.Add_Click({
     $installed = Join-Path $script:Root 'toolkit\uninstall.ps1'
     if (-not (Test-Path $installed)) { Write-Log "Nothing to remove - it is not installed."; return }
 
-    $removeArgs = @()
-    $label = 'Undoing the settings'
-    if ($rdoFull.Checked) {
-        # Deleting files is worth one confirmation; undoing PATH is not.
-        $answer = [System.Windows.Forms.MessageBox]::Show(
-            "This deletes every installed tool and the Python environment under:`n`n$($script:Root)`n`n" +
-            "Anything you installed into that Python goes too. The toolkit's own scripts stay, so you can reinstall.`n`nContinue?",
-            "Full uninstall", 'YesNo', 'Warning')
-        if ($answer -ne 'Yes') { Write-Log "Full uninstall cancelled."; return }
-        $removeArgs += '-Full'
-        $label = 'Removing everything'
-    }
-    Start-Tracked $installed $removeArgs (Join-Path $script:Root 'toolkit\uninstall.status.log') $label
+    # Deleting files is worth one confirmation; undoing PATH is not.
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        "This deletes every installed tool and the Python environment under:`n`n$($script:Root)`n`n" +
+        "Anything you installed into that Python goes too. The toolkit's own scripts stay, so you can reinstall.`n`nContinue?",
+        "Remove everything", 'YesNo', 'Warning')
+    if ($answer -ne 'Yes') { Write-Log "Cancelled - nothing was removed."; return }
+
+    Start-Tracked $installed @('-Full') (Join-Path $script:Root 'toolkit\uninstall.status.log') 'Removing everything'
 })
 
 $btnCheck.Add_Click({

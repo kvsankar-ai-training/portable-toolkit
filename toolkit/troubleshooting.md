@@ -329,8 +329,8 @@ Px and deregisters it from starting at logon, because its files are going too. T
 own scripts stay, because the script doing the deleting is one of them, so the
 last step - deleting the folder - is still yours.
 
-`GUI.cmd` does the same: choose Basic or Full beside the buttons, then press
-Uninstall. Full asks for confirmation first.
+`GUI.cmd` has both as separate buttons: Uninstall undoes the settings, and
+Remove everything deletes the files too, asking for confirmation first.
 
 ## Antivirus quarantined the toolkit
 
