@@ -7,6 +7,10 @@ $Root = Split-Path -Parent $PSScriptRoot
 $config = Get-Content (Join-Path $PSScriptRoot 'tools.json') -Raw | ConvertFrom-Json
 . (Join-Path $PSScriptRoot 'paths.ps1')
 
+function Test-PersistentTool($tool) {
+    -not ($tool.PSObject.Properties.Name -contains 'persistent_path' -and $tool.persistent_path -eq $false)
+}
+
 Write-Host "portable-toolkit $($config.version)"
 Write-Host "Install root: $Root`n"
 
@@ -69,7 +73,21 @@ $machinePaths = ([Environment]::GetEnvironmentVariable('Path', 'Machine') -split
 
 Write-Host "`nFound by name, as an assistant would call them:"
 $wrong = 0
-foreach ($name in 'python', 'pip', 'node', 'npm', 'git', 'uv') {
+# Built from tools.json rather than hard-coded, so an added tool is checked
+# too. Three things it has to get right: the name to type is the executable's,
+# not the manifest's (ripgrep installs rg.exe); a tool marked persistent_path
+# false is deliberately kept off the permanent PATH, so asking for it by name
+# would always fail; and an optional tool that was never installed is not a
+# fault. python, pip and npm come with the environments rather than tools.json.
+$names = @()
+foreach ($tool in $config.tools) {
+    if (-not (Test-PersistentTool $tool)) { continue }
+    if (-not (Test-Path (Join-Path $Root ($tool.verify[0] -replace '/', '\')))) { continue }
+    $names += [System.IO.Path]::GetFileNameWithoutExtension((($tool.verify[0] -split '/')[-1]))
+}
+$names += 'python', 'pip', 'npm'
+
+foreach ($name in $names) {
     $found = (Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1).Source
     if (-not $found) {
         Write-Host ("  {0,-6} not found" -f $name) -ForegroundColor Red

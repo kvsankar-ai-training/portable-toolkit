@@ -91,6 +91,13 @@ function Test-ToolInstalled($tool) {
     Test-Path $exe
 }
 
+function Get-ToolCommandName($tool) {
+    # tools.json names the tool, which is not always what you type to run it:
+    # ripgrep installs rg.exe. Readiness has to ask about the name someone
+    # would actually type, or a perfectly good install reports as missing.
+    [System.IO.Path]::GetFileNameWithoutExtension((($tool.verify[0] -split '/')[-1]))
+}
+
 function Test-ToolReady($name) {
     # Whether Windows would actually find this by typing its bare name right
     # now - the only thing a participant cares about. A file can exist under
@@ -360,7 +367,7 @@ function Update-Status {
     $allReady = $true
     foreach ($tool in $config.tools) {
         if (Test-PersistentTool $tool) {
-            $ready = Test-ToolReady $tool.name
+            $ready = Test-ToolReady (Get-ToolCommandName $tool)
             Set-ProgressState $tool.name $(if ($ready) { 'ready' } else { 'needs-setup' })
             if (-not $ready) { $allReady = $false }
         } else {
