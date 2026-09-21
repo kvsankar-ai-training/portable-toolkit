@@ -118,10 +118,13 @@ function Test-PersistentTool($tool) {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Portable Toolkit"
-$form.Size = New-Object System.Drawing.Size(560, 736)
+# Sized at the end, once the left column's height is known - see the bottom of
+# this file. Two columns rather than one: the controls stack on the left, the
+# log fills the right, which keeps the window a sensible shape on a laptop
+# screen instead of growing taller with every addition.
 $form.StartPosition = 'CenterScreen'
-$form.FormBorderStyle = 'FixedDialog'
-$form.MaximizeBox = $false
+$form.FormBorderStyle = 'Sizable'
+$form.MaximizeBox = $true
 
 $lblRoot = New-Object System.Windows.Forms.Label
 $lblRoot.Location = New-Object System.Drawing.Point(12, 12)
@@ -297,12 +300,27 @@ $grpCopilot.Controls.Add($lblCopilotHint)
 
 # ---- log --------------------------------------------------------------------
 
-# A quiet button above the log, right-aligned. Reporting a problem means
-# sending this text, and selecting it by hand in a read-only box is awkward.
+# The right-hand column. It starts level with the first group on the left and
+# runs to the same bottom edge, so the two columns square up whatever the left
+# one ends up being - the progress panel grows a row per tool in tools.json.
+$logLeft = 12 + 520 + 12
+$logWidth = 450
+$logTop = $grpSetup.Top
+$logBottom = $grpCopilot.Bottom
+
+$lblLog = New-Object System.Windows.Forms.Label
+$lblLog.Text = "Log"
+$lblLog.Location = New-Object System.Drawing.Point($logLeft, ($logTop - 20))
+$lblLog.AutoSize = $true
+$lblLog.ForeColor = [System.Drawing.Color]::DimGray
+$form.Controls.Add($lblLog)
+
+# Quiet, and out of the way until wanted. Reporting a problem means sending
+# this text, and selecting it by hand in a read-only box is awkward.
 $btnCopyLog = New-Object System.Windows.Forms.Button
 $btnCopyLog.Text = "Copy"
 $btnCopyLog.Size = New-Object System.Drawing.Size(62, 22)
-$btnCopyLog.Location = New-Object System.Drawing.Point(470, ($grpCopilot.Bottom + 6))
+$btnCopyLog.Location = New-Object System.Drawing.Point(($logLeft + $logWidth - 62), ($logTop - 24))
 $btnCopyLog.FlatStyle = 'Flat'
 $btnCopyLog.FlatAppearance.BorderColor = [System.Drawing.Color]::LightGray
 $btnCopyLog.ForeColor = [System.Drawing.Color]::DimGray
@@ -310,13 +328,22 @@ $btnCopyLog.TabStop = $false
 $form.Controls.Add($btnCopyLog)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
-$txtLog.Location = New-Object System.Drawing.Point(12, ($grpCopilot.Bottom + 32))
-$txtLog.Size = New-Object System.Drawing.Size(520, (652 - $grpCopilot.Bottom))
+$txtLog.Location = New-Object System.Drawing.Point($logLeft, $logTop)
+$txtLog.Size = New-Object System.Drawing.Size($logWidth, ($logBottom - $logTop))
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = 'Vertical'
 $txtLog.ReadOnly = $true
 $txtLog.Font = New-Object System.Drawing.Font("Consolas", 9)
 $form.Controls.Add($txtLog)
+
+# Now that both columns exist, make the window exactly fit them.
+$form.ClientSize = New-Object System.Drawing.Size(($logLeft + $logWidth + 12), ($logBottom + 12))
+
+# Resizable, but never smaller than the controls need. Only the log stretches:
+# the left column is a fixed stack, so it anchors top-left and stays put.
+$form.MinimumSize = $form.Size
+$txtLog.Anchor = 'Top,Bottom,Left,Right'
+$btnCopyLog.Anchor = 'Top,Right'
 
 # Says "Copied" briefly, then goes back. Without that there is no sign it
 # worked, and people press it again.
