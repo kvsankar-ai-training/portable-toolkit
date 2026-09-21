@@ -106,6 +106,12 @@ NTLM/Kerberos proxy relay for machines where a corporate proxy demands
 authentication that most command-line tools cannot supply. It does nothing
 until configured and started.
 
+It is not needed for setup's own downloads, which go the way a browser goes -
+whatever Windows resolves for the address, with the logged-in session offered
+if the proxy asks. Reach for `px` when a particular program fails against the
+proxy, not as a matter of course. The GitHub Copilot desktop app is the usual
+one that does.
+
 ```
 run.cmd px --save --proxy=your-proxy:port
 run.cmd px --install

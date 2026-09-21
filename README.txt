@@ -2,8 +2,10 @@ PORTABLE TOOLKIT
 ================
 
 This installs Git, Node, uv, Python and Px without administrator rights and
-without a software request. Px is a proxy helper; it installs alongside the
-others but only does something once you configure it (see
+without a software request. Px is a proxy helper for programs that cannot get
+through an authenticating proxy on their own - the GitHub Copilot desktop app
+is the usual one. It installs alongside the others but does nothing until you
+configure it, and setup does not need it to download anything (see
 toolkit\troubleshooting.md).
 
 

@@ -50,6 +50,12 @@ re-signing it. Do not disable certificate validation. Report it.
 
 ## The proxy answers with 407, and setting HTTPS_PROXY is not enough
 
+This is about programs you run afterwards, not about setup itself. Setup lets
+Windows decide how to reach each address - directly, through a configured
+proxy, or through whatever an automatic configuration script picks per address
+- and offers your logged-in session's credentials if asked, which is what a
+browser does. On a network where browsing works, downloading works.
+
 Some corporate proxies require NTLM or Kerberos authentication on every
 connection, not just a proxy address. Tools that only read `HTTPS_PROXY` have
 no way to answer that challenge and fail even though the address is correct.
@@ -124,33 +130,6 @@ a custom certificate were configured at some point while diagnosing a
 different problem, remove the certificate variables first and see if the
 proxy alone is now enough - it may be the underlying issue px already solved.
 
-## Setup fails with "407 Proxy Authentication Required"
-
-Your proxy wants credentials before it will pass the download through.
-
-Setup offers your logged-in Windows session, which is what a browser does, and
-that is enough for most proxies. `uv` cannot do this - it has no way to answer
-an NTLM or Kerberos challenge - so the Python download needs Px running. Setup
-routes `uv` through Px automatically when it finds it running.
-
-So: start Px, then run setup again.
-
-```powershell
-<root>\run.cmd px
-```
-
-If Px has never been configured on this machine, give it the proxy address
-first. Whoever runs your network has it, and `toolkit\site.json` may already
-carry it:
-
-```powershell
-<root>\run.cmd px --save --proxy=your-proxy:port
-<root>\run.cmd px
-```
-
-A plain uninstall leaves Px alone for this reason. Only `uninstall.ps1 -Full`
-stops it, and that deletes its files too.
-
 ## Setup stops with "access to the path ... is denied"
 
 Something in that folder is running, and Windows will not let a running
@@ -177,23 +156,28 @@ delete its folder, then run setup again:
 Remove-Item <root>\px -Recurse -Force
 ```
 
-## uv fails with "failed to create underlying connection" or a tunnel error
+## A download fails with "failed to create underlying connection" or a tunnel error
 
-uv is being sent through a proxy that is not answering. The usual cause is Px
-being pointed at, but not actually serving - Px exits on its own if it has no
-upstream proxy configured, so a Px that was running a moment ago may be gone.
+Something is being sent through a proxy that is not answering. The usual cause
+is `HTTPS_PROXY` left pointing at a local relay such as Px, which is needed for
+other programs but is not running at the moment.
 
-Setup checks the port before routing uv through it, so it will only use Px when
-something is genuinely listening. If you set `HTTPS_PROXY` yourself, setup
-leaves it alone and trusts you, so check it points somewhere alive:
+Setup checks that a proxy answers before using it, so its own downloads are not
+affected. `uv` reads `HTTPS_PROXY` for itself and does not make that check, so
+clear it or point it somewhere alive:
 
 ```powershell
-$env:HTTPS_PROXY
-<root>\run.cmd px --quit
+$env:HTTPS_PROXY = $null      # this window only
+```
+
+If a relay is meant to be running, start it:
+
+```powershell
 <root>\run.cmd px
 ```
 
-If Px will not stay running, it has no upstream proxy configured. Give it one:
+Px exits on its own when it has no upstream proxy configured, so if it will not
+stay running, give it one:
 
 ```powershell
 <root>\run.cmd px --save --proxy=your-proxy:port

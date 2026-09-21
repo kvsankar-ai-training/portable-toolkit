@@ -38,6 +38,36 @@ try {
     [System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
 } catch { }
 
+function Test-ProxyReachable($ProxyUri) {
+    # Is anything actually accepting connections there? A proxy address that
+    # nothing answers on turns a download that would have worked into a
+    # connection error, so it is worth one second to find out.
+    try {
+        $uri = [Uri] $ProxyUri
+        $client = New-Object System.Net.Sockets.TcpClient
+        $ok = $client.ConnectAsync($uri.Host, $uri.Port).Wait(1500)
+        $client.Close()
+        return $ok
+    } catch { return $false }
+}
+
+# A proxy variable left pointing at something that is not running takes the
+# whole install down with it: uv reads these for itself, and so does
+# Invoke-WebRequest on PowerShell 7, so neither can be talked out of it by
+# argument. They are commonly set to a local relay such as Px that is needed
+# for some other program and is not running at the moment.
+#
+# Clearing them here affects this process only. Windows still knows how to
+# reach the internet - directly, through a configured proxy, or through an
+# automatic configuration script - and that is what gets used instead.
+foreach ($name in 'HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY') {
+    $value = (Get-Item "env:$name" -ErrorAction SilentlyContinue).Value
+    if (-not $value) { continue }
+    if (Test-ProxyReachable $value) { continue }
+    Write-Host "  $name is set to $value, which is not answering - ignoring it for this install" -ForegroundColor Yellow
+    Remove-Item "env:$name" -ErrorAction SilentlyContinue
+}
+
 $Source = $PSScriptRoot
 $config = Get-Content (Join-Path $Source 'tools.json') -Raw | ConvertFrom-Json
 . (Join-Path $Source 'paths.ps1')
@@ -131,19 +161,30 @@ function Test-Tool($tool) {
     Test-ToolRuns $tool
 }
 
+
 function Get-DownloadArgs($Uri, $OutFile) {
-    # Only offer credentials when there is actually a proxy to offer them to:
-    # -ProxyUseDefaultCredentials is rejected unless -Proxy is given too. An
-    # explicit HTTPS_PROXY wins, because that is how someone points this at a
-    # running px; otherwise ask Windows what it would use for this address.
+    # Windows already knows how to reach the internet here - directly, through a
+    # configured proxy, or through whatever a PAC script decides per address -
+    # so the normal case is to let it decide and simply offer the logged-in
+    # session's credentials in case the proxy asks for them.
+    #
+    # HTTPS_PROXY is honoured only if something is listening on it. It is often
+    # set to a local relay like Px that is needed for some other program, and a
+    # relay that is not running would otherwise take downloads down with it.
+    # -ProxyUseDefaultCredentials is rejected unless -Proxy is given too, which
+    # is why this is built per download rather than set once.
     $splat = @{ Uri = $Uri; OutFile = $OutFile; UseBasicParsing = $true }
-    $proxy = $env:HTTPS_PROXY
-    if (-not $proxy) {
+
+    $proxy = $null
+    if ($env:HTTPS_PROXY -and (Test-ProxyReachable $env:HTTPS_PROXY)) {
+        $proxy = $env:HTTPS_PROXY
+    } else {
         try {
             $resolved = [System.Net.WebRequest]::GetSystemWebProxy().GetProxy($Uri)
             if ($resolved -and $resolved.AbsoluteUri -ne $Uri) { $proxy = $resolved.AbsoluteUri }
         } catch { }
     }
+
     if ($proxy) {
         $splat.Proxy = $proxy
         $splat.ProxyUseDefaultCredentials = $true
@@ -174,18 +215,6 @@ function Stop-RunningFrom($Folder) {
     }
     if ($stopped.Count) { Start-Sleep -Milliseconds 800 }
     $stopped
-}
-
-function Test-PxServing {
-    # Is anything actually accepting connections on px's port? This is the only
-    # question that matters before sending uv through it; whether a px process
-    # exists is not the same thing.
-    try {
-        $client = New-Object System.Net.Sockets.TcpClient
-        $ok = $client.ConnectAsync('127.0.0.1', 3128).Wait(1500)
-        $client.Close()
-        return $ok
-    } catch { return $false }
 }
 
 function Restart-Stopped($tool, $wasRunning) {
@@ -398,21 +427,6 @@ if ($answer -eq '' -or $answer -eq 'y') {
 # Point uv inside the install root, then let it fetch Python.
 $ToolkitRootOverride = $InstallRoot
 . (Join-Path $Source 'env.ps1')
-
-# uv has no way to answer an NTLM challenge, so unlike the downloads above it
-# cannot use the logged-in session. Px can answer on its behalf - but only if
-# Px is genuinely serving. A process existing is not enough: Px exits when it
-# has no upstream proxy configured, and setup may have only just restarted it,
-# so the process can be there for a moment and gone by the time uv runs.
-# Pointing uv at a port with nothing behind it turns a working direct download
-# into "failed to create underlying connection", which is worse than leaving
-# it alone. So connect to the port and see.
-if (-not $env:HTTPS_PROXY -and (Test-PxServing)) {
-    $env:HTTP_PROXY = 'http://127.0.0.1:3128'
-    $env:HTTPS_PROXY = 'http://127.0.0.1:3128'
-    Write-Host "  routing uv through px on 127.0.0.1:3128"
-    Write-LogLine "px is serving, so uv is routed through it for this install."
-}
 
 Write-Host "`nPython $($config.python.version)"
 Write-Status 'python' 'installing'
