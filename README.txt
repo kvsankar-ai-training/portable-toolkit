@@ -35,19 +35,26 @@ finished.
 WHAT IT CHANGES ON YOUR MACHINE
 -------------------------------
 
-Two things, and nothing else:
+Setup changes two things, and nothing else:
 
   - the C:\tools folder
   - five entries added to your user PATH, so the tools work by name
 
-It does not touch the system PATH, the registry beyond that, or any other
-folder. Setup shows you the five entries before adding them.
+It does not touch the system PATH or any other folder. Setup shows you the five
+entries before adding them.
 
-To undo both:
+There is a third change, but only if you ask for it. If you configure Px and
+tick "start at logon" in the GUI, or run "px --install" yourself, Px is
+registered to start with Windows. That registration lives outside C:\tools and
+would survive deleting the folder, so uninstall handles it.
+
+To undo everything:
 
     C:\tools\toolkit\uninstall.ps1
 
-That removes the PATH entries and tells you to delete the folder.
+That removes the PATH entries, stops Px and deregisters it if it was set up,
+then tells you to delete the folder. Run it before deleting C:\tools, not
+after.
 
 
 USING THE TOOLS

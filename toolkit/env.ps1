@@ -24,6 +24,10 @@ $env:UV_PYTHON_BIN_DIR      = Join-Path $Root 'bin'
 $env:UV_PROJECT_ENVIRONMENT = $envDir   # stops "uv sync" creating a .venv
 $env:VIRTUAL_ENV            = $envDir   # tells "uv pip install" where to install
 
-foreach ($p in (Get-ToolkitPaths $Root $config)) {
-    if ($env:Path -notlike "*$p*") { $env:Path = "$p;$env:Path" }
-}
+# Built in one go, in the order Get-ToolkitPaths returns. Prepending them one at
+# a time reverses that order, which put px - and so px's own bundled python.exe -
+# ahead of the toolkit's real Python, and "run.cmd python" then ran the wrong
+# interpreter with none of the toolkit's packages visible.
+$toolkitPaths = Get-ToolkitPaths $Root $config
+$rest = $env:Path -split ';' | Where-Object { $_ -and ($toolkitPaths -notcontains $_) }
+$env:Path = (($toolkitPaths + $rest) -join ';')

@@ -15,6 +15,25 @@ function Get-ToolkitPaths($Root, $config) {
     $paths
 }
 
+function Get-KnownToolkitPaths($Root, $config) {
+    # Every folder this toolkit could have put on PATH, at the current root and
+    # at either root tools.json names. Without the second part, an install that
+    # first landed in %USERPROFILE%\tools and later in C:\tools would leave the
+    # earlier entries behind: they point at a folder that may no longer exist,
+    # but they do not match the current root so nothing would clean them up.
+    $roots = @($Root)
+    foreach ($candidate in @($config.install.root, $config.install.fallback_root)) {
+        if (-not $candidate) { continue }
+        $expanded = [Environment]::ExpandEnvironmentVariables($candidate) -replace '/', '\'
+        $expanded = $expanded.TrimEnd('\')
+        if ($roots -notcontains $expanded) { $roots += $expanded }
+    }
+
+    $paths = @()
+    foreach ($r in $roots) { $paths += Get-ToolkitPaths $r $config }
+    $paths | Select-Object -Unique
+}
+
 function Get-PersistentToolkitPaths($Root, $config) {
     # Same list, minus any tool marked "persistent_path": false. Those still
     # need to be reachable within run.cmd/env.ps1's own short-lived PATH (so

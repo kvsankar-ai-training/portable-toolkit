@@ -31,11 +31,14 @@ $config = Get-Content (Join-Path $Source 'tools.json') -Raw | ConvertFrom-Json
 # of where the install root ends up. A caller that wants granular progress
 # (gui.ps1) tails this file; a console run ignores it and reads Write-Host as
 # always. Reset on every run so a caller never reads a previous run's lines.
+# Progress reporting must never be the reason an install fails, so a folder that
+# cannot be written to costs the granular progress and nothing else.
 $StatusLog = Join-Path $Source 'install.status.log'
-Set-Content -Path $StatusLog -Value $null
+try { Set-Content -Path $StatusLog -Value $null -ErrorAction Stop } catch { $StatusLog = $null }
 function Write-Status {
     param([string] $Name, [string] $State, [string] $Detail = '')
-    Add-Content -Path $StatusLog -Value "STATUS|name=$Name|state=$State|detail=$Detail"
+    if (-not $StatusLog) { return }
+    try { Add-Content -Path $StatusLog -Value "STATUS|name=$Name|state=$State|detail=$Detail" -ErrorAction Stop } catch { }
 }
 
 # A zip downloaded from the internet marks every file it extracts, and the mark
@@ -188,11 +191,6 @@ if ($config.python.packages.Count -gt 0) {
     Invoke-Uv pip install @($config.python.packages)
 }
 
-} catch {
-    Write-Status 'overall' 'error' $_.Exception.Message
-    throw
-}
-
 # Keep the scripts and the manifest beside what they installed, so the folder
 # describes itself after the extracted copy is deleted.
 $destToolkit = Join-Path $InstallRoot 'toolkit'
@@ -223,7 +221,7 @@ Write-Host "`nInstalled." -ForegroundColor Green
 # named, including ones like px that are no longer meant to persist, so a
 # stale entry from before that changed also gets cleaned up here.
 $wanted = Get-PersistentToolkitPaths $InstallRoot $config
-$allKnown = Get-ToolkitPaths $InstallRoot $config
+$allKnown = Get-KnownToolkitPaths $InstallRoot $config
 Write-Host "`nThe tools work by name only if this folder is on your PATH."
 Write-Host "Without it, an assistant running 'python' or 'node' will not find them."
 Write-Host "These entries would be added to your user PATH, not the system one:"
@@ -250,3 +248,11 @@ Write-Host "`nEverything is in $InstallRoot. To check it:  $InstallRoot\toolkit\
 Write-Host "To remove it:                              $InstallRoot\toolkit\uninstall.ps1"
 Write-Host "The folder you extracted is no longer needed and can be deleted.`n"
 Write-Status 'overall' 'done'
+
+} catch {
+    # Covers the PATH update and the copy step too, not just the downloads.
+    # Without that, a failure here ended the process with no terminal status
+    # line and gui.ps1 was left showing a run that never finished.
+    Write-Status 'overall' 'error' $_.Exception.Message
+    throw
+}

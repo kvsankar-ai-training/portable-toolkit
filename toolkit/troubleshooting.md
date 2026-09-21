@@ -138,39 +138,35 @@ installed, but the machine will not run programs from a user-writable folder.
 This cannot be worked around from inside the toolkit. Record the exact message
 and which executable was blocked.
 
-## Python is installed but `python` still runs a different one
-
-`scripts\env.ps1` only affects the window it was run in. Run it again in the
-new window, or re-run `SETUP.cmd` and answer `y` to the PATH question.
-
-Check which one is being found:
-
-```powershell
-Get-Command python | Select-Object -ExpandProperty Source
-```
-
-## Removing everything
-
-Delete the folder. If you answered `y` to the PATH question, also remove the
-entries from your user PATH under Settings, Edit environment variables for
-your account.
-
 ## `python` runs the wrong Python after installing
 
-Windows builds a process's PATH from the system entries first and the user
-entries second. Setup can only write the user part, so a Python, Node or Git
-that is installed for all users will always be found first, and no user-level
-change can outrank it.
+Two causes, and `check.ps1` tells them apart. Start there:
 
-`check.ps1` reports this explicitly when it happens:
+```powershell
+<root>\toolkit\check.ps1
+```
+
+**Something is installed machine-wide.** Windows builds a process's PATH from
+the system entries first and the user entries second. Setup can only write the
+user part, so a Python, Node or Git installed for all users is always found
+first, and no user-level change can outrank it.
 
 ```
   python C:\Python314\python.exe
          ^ installed machine-wide; user PATH cannot override it
 ```
 
-Either use `run.cmd python ...`, or call `<root>\env\Scripts\python.exe`
-directly. Both bypass name resolution entirely.
+**Or this window started before setup ran.** A process keeps the environment it
+was launched with. Open a new window, or run `toolkit\env.ps1`, which affects
+only the window it is run in.
+
+Either way, these bypass name resolution entirely and always reach the
+toolkit's copy:
+
+```
+<root>\run.cmd python ...
+<root>\env\Scripts\python.exe ...
+```
 
 ## A terminal or assistant does not see the tools
 
@@ -189,5 +185,6 @@ failed, the account cannot write to either location, which is worth reporting.
 <root>\toolkit\uninstall.ps1
 ```
 
-That removes the toolkit's user PATH entries. It then tells you to delete the
-folder, which it cannot do while running from inside it.
+That removes the toolkit's user PATH entries and, if Px was registered to start
+at logon, stops it and deregisters it. It then tells you to delete the folder,
+which it cannot do while running from inside it.

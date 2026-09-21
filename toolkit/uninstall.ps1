@@ -1,6 +1,7 @@
 <#
-Removes the toolkit's entries from your user PATH and tells you what is left to
-delete. Changes nothing else.
+Reverses everything setup persisted outside the toolkit folder: the user PATH
+entries, and Px's logon registration if it was ever set up. Then tells you what
+is left to delete.
 
 Run it as:  .\toolkit\uninstall.ps1
 #>
@@ -12,14 +13,15 @@ $config = Get-Content (Join-Path $PSScriptRoot 'tools.json') -Raw | ConvertFrom-
 # Same parseable-line convention as install.ps1's install.status.log, for a
 # caller (gui.ps1) that wants to show progress instead of a bare console.
 $StatusLog = Join-Path $PSScriptRoot 'uninstall.status.log'
-Set-Content -Path $StatusLog -Value $null
+try { Set-Content -Path $StatusLog -Value $null -ErrorAction Stop } catch { $StatusLog = $null }
 function Write-Status {
     param([string] $Name, [string] $State, [string] $Detail = '')
-    Add-Content -Path $StatusLog -Value "STATUS|name=$Name|state=$State|detail=$Detail"
+    if (-not $StatusLog) { return }
+    try { Add-Content -Path $StatusLog -Value "STATUS|name=$Name|state=$State|detail=$Detail" -ErrorAction Stop } catch { }
 }
 Write-Status 'overall' 'starting'
 
-$ours = Get-ToolkitPaths $Root $config
+$ours = Get-KnownToolkitPaths $Root $config
 $current = [Environment]::GetEnvironmentVariable('Path', 'User')
 $kept = ($current -split ';') | Where-Object { $_ -and ($ours -notcontains $_) }
 
@@ -32,7 +34,24 @@ if (($current -split ';').Count -ne $kept.Count) {
     Write-Status 'path' 'clean'
 }
 
-Write-Host "`nNothing else was changed. Setup persisted PATH and nothing more."
+# Px, if it was configured, is registered to start at logon and may be running.
+# That registration lives outside this folder and survives deleting it, so the
+# folder must not be deleted before this has run.
+$px = Join-Path $Root 'px\px.exe'
+if (Test-Path $px) {
+    if (Get-Process px -ErrorAction SilentlyContinue) {
+        Write-Host "Stopping Px..."
+        & $px --quit *> $null
+    }
+    # Harmless when it was never registered; px reports nothing to remove.
+    & $px --uninstall *> $null
+    Write-Host "Deregistered Px from starting at logon." -ForegroundColor Green
+    Write-Status 'px' 'deregistered'
+} else {
+    Write-Status 'px' 'absent'
+}
+
+Write-Host "`nNothing else was changed."
 Write-Host "To finish, delete the folder:  $Root"
 Write-Host "This script is inside it, so delete it from outside, or run:"
 Write-Host "  Remove-Item -Recurse -Force '$Root'"

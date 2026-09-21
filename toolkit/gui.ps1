@@ -397,7 +397,12 @@ function Sync-Environment {
     $user = [Environment]::GetEnvironmentVariable('Path', 'User')
     $env:Path = "$machine;$user"
     foreach ($name in 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE') {
+        # User scope wins, machine scope is the fallback - the same precedence
+        # Windows itself uses, and the same as the PATH line above. Reading only
+        # the user scope would delete a proxy that IT had set machine-wide, and
+        # anything launched from here would then inherit nothing.
         $value = [Environment]::GetEnvironmentVariable($name, 'User')
+        if (-not $value) { $value = [Environment]::GetEnvironmentVariable($name, 'Machine') }
         if ($value) { Set-Item "env:$name" $value } else { Remove-Item "env:$name" -ErrorAction SilentlyContinue }
     }
 }
@@ -475,12 +480,26 @@ $btnLaunchCopilot.Add_Click({
     if (-not $exe) { Write-Log "GitHub Copilot app not found at the usual install location."; return }
 
     # A copy already running keeps whatever environment it started with, the
-    # same problem this button exists to avoid - so it needs to go first.
-    $running = Get-Process | Where-Object { $_.ProcessName -in 'github', 'copilot' }
-    if ($running) {
-        Write-Log "Closing the running copy of GitHub Copilot ..."
-        $running | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Milliseconds 500
+    # same problem this button exists to avoid - so it needs to go first. Ask it
+    # to close rather than killing it outright, because a forced exit loses
+    # whatever the person had not saved.
+    $running = @(Get-Process | Where-Object { $_.ProcessName -in 'github', 'copilot' })
+    if ($running.Count) {
+        Write-Log "Asking GitHub Copilot to close ..."
+        foreach ($p in $running) { [void]$p.CloseMainWindow() }
+
+        $deadline = (Get-Date).AddSeconds(5)
+        while ((Get-Date) -lt $deadline) {
+            if (-not (Get-Process -Id $running.Id -ErrorAction SilentlyContinue)) { break }
+            Start-Sleep -Milliseconds 200
+        }
+
+        $stubborn = @(Get-Process -Id $running.Id -ErrorAction SilentlyContinue)
+        if ($stubborn.Count) {
+            Write-Log "It did not close after 5 seconds. Forcing it - unsaved work there will be lost."
+            $stubborn | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Milliseconds 500
+        }
     }
 
     Sync-Environment
