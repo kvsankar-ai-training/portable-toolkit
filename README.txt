@@ -16,10 +16,13 @@ WHAT TO DO
 
 2. Double-click SETUP.cmd.
 
-   Or double-click SETUP-WITH-EXTRAS.cmd to add the optional extras as well:
-   ripgrep, jq, and the Python libraries for reading and writing Word, Excel,
-   PowerPoint and PDF files. That downloads a few hundred MB more. You can run
-   it later instead; nothing is lost by starting with SETUP.cmd.
+   That installs the tools. To also get the extras - ripgrep, jq and the
+   Python libraries for Word, Excel, PowerPoint and PDF - use GUI.cmd and
+   choose Full, or run SETUP.cmd from a command prompt with the word full:
+
+       SETUP.cmd full
+
+   You can add them later; nothing is lost by starting with the tools.
 
 3. Answer the question at the end. Enter accepts yes.
 
@@ -131,9 +134,9 @@ extras are everything beyond that:
              pypdf        splitting, merging and rearranging PDFs
              Pillow       images
 
-Install them at any time by running SETUP-WITH-EXTRAS.cmd, or:
+Install them at any time: GUI.cmd, choose Full, then Install / Fix. Or:
 
-    C:\tools\toolkit\install.ps1 -IncludeOptional   (from PowerShell)
+    SETUP.cmd full
 
 Reading a document is one call. The assistant will write the script; this is
 what it looks like:

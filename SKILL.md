@@ -74,8 +74,8 @@ so a fresh install gets it too.
 ## Documents
 
 The document libraries are optional and are not installed by `SETUP.cmd`. Check
-first with `check.ps1`, which reports how many are present. To add them, run
-`SETUP-WITH-EXTRAS.cmd`, or `toolkit\install.ps1 -IncludeOptional`.
+first with `check.ps1`, which reports how many are present. To add them, run `SETUP.cmd full`,
+or open `GUI.cmd`, choose **Full**, and press Install / Fix.
 
 Reading any of docx, pdf, xlsx, pptx, html or csv is one call:
 

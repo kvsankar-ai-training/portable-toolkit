@@ -111,7 +111,7 @@ function Test-PersistentTool($tool) {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Portable Toolkit"
-$form.Size = New-Object System.Drawing.Size(560, 700)
+$form.Size = New-Object System.Drawing.Size(560, 736)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -132,26 +132,55 @@ $form.Controls.Add($lblStatus)
 $grpSetup = New-Object System.Windows.Forms.GroupBox
 $grpSetup.Text = "Setup"
 $grpSetup.Location = New-Object System.Drawing.Point(12, 68)
-$grpSetup.Size = New-Object System.Drawing.Size(520, 60)
+$grpSetup.Size = New-Object System.Drawing.Size(520, 96)
 $form.Controls.Add($grpSetup)
+
+# One choice, used by both buttons below: it decides how much Install puts on
+# and how much Uninstall takes off, so there is never a question of which mode
+# a given button is in.
+$rdoBasic = New-Object System.Windows.Forms.RadioButton
+$rdoBasic.Text = "Basic - the tools"
+$rdoBasic.Location = New-Object System.Drawing.Point(15, 20)
+$rdoBasic.Size = New-Object System.Drawing.Size(140, 20)
+$rdoBasic.Checked = $true
+$grpSetup.Controls.Add($rdoBasic)
+
+$rdoFull = New-Object System.Windows.Forms.RadioButton
+$rdoFull.Text = "Full - also document libraries, ripgrep and jq"
+$rdoFull.Location = New-Object System.Drawing.Point(165, 20)
+$rdoFull.Size = New-Object System.Drawing.Size(330, 20)
+$grpSetup.Controls.Add($rdoFull)
 
 $btnInstall = New-Object System.Windows.Forms.Button
 $btnInstall.Text = "Install / Fix"
-$btnInstall.Location = New-Object System.Drawing.Point(15, 22)
+$btnInstall.Location = New-Object System.Drawing.Point(15, 48)
 $btnInstall.Size = New-Object System.Drawing.Size(130, 28)
 $grpSetup.Controls.Add($btnInstall)
 
 $btnCheck = New-Object System.Windows.Forms.Button
 $btnCheck.Text = "Show details"
-$btnCheck.Location = New-Object System.Drawing.Point(155, 22)
+$btnCheck.Location = New-Object System.Drawing.Point(155, 48)
 $btnCheck.Size = New-Object System.Drawing.Size(110, 28)
 $grpSetup.Controls.Add($btnCheck)
 
 $btnUninstall = New-Object System.Windows.Forms.Button
 $btnUninstall.Text = "Uninstall"
-$btnUninstall.Location = New-Object System.Drawing.Point(275, 22)
+$btnUninstall.Location = New-Object System.Drawing.Point(275, 48)
 $btnUninstall.Size = New-Object System.Drawing.Size(100, 28)
 $grpSetup.Controls.Add($btnUninstall)
+
+$lblMode = New-Object System.Windows.Forms.Label
+$lblMode.Location = New-Object System.Drawing.Point(385, 54)
+$lblMode.AutoSize = $true
+$lblMode.ForeColor = [System.Drawing.Color]::Gray
+$grpSetup.Controls.Add($lblMode)
+
+$updateMode = {
+    $lblMode.Text = if ($rdoFull.Checked) { "Uninstall also deletes files" } else { "Uninstall undoes settings only" }
+}
+$rdoBasic.Add_CheckedChanged($updateMode)
+$rdoFull.Add_CheckedChanged($updateMode)
+& $updateMode
 
 # ---- progress panel ----------------------------------------------------------
 
@@ -263,7 +292,7 @@ $grpCopilot.Controls.Add($lblCopilotHint)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
 $txtLog.Location = New-Object System.Drawing.Point(12, ($grpCopilot.Bottom + 8))
-$txtLog.Size = New-Object System.Drawing.Size(520, (640 - $grpCopilot.Bottom))
+$txtLog.Size = New-Object System.Drawing.Size(520, (676 - $grpCopilot.Bottom))
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = 'Vertical'
 $txtLog.ReadOnly = $true
@@ -428,13 +457,29 @@ $timer.Start()
 $btnInstall.Add_Click({
     # The only copy guaranteed to exist before a first install is this one.
     $scriptPath = Join-Path $PSScriptRoot 'install.ps1'
-    Start-Tracked $scriptPath @('-Unattended') (Join-Path $PSScriptRoot 'install.status.log') 'Setting things up'
+    $setupArgs = @('-Unattended')
+    if ($rdoFull.Checked) { $setupArgs += '-IncludeOptional' }
+    $label = if ($rdoFull.Checked) { 'Setting things up, with the extras' } else { 'Setting things up' }
+    Start-Tracked $scriptPath $setupArgs (Join-Path $PSScriptRoot 'install.status.log') $label
 })
 
 $btnUninstall.Add_Click({
     $installed = Join-Path $script:Root 'toolkit\uninstall.ps1'
     if (-not (Test-Path $installed)) { Write-Log "Nothing to remove - it is not installed."; return }
-    Start-Tracked $installed @() (Join-Path $script:Root 'toolkit\uninstall.status.log') 'Uninstalling'
+
+    $removeArgs = @()
+    $label = 'Undoing the settings'
+    if ($rdoFull.Checked) {
+        # Deleting files is worth one confirmation; undoing PATH is not.
+        $answer = [System.Windows.Forms.MessageBox]::Show(
+            "This deletes every installed tool and the Python environment under:`n`n$($script:Root)`n`n" +
+            "Anything you installed into that Python goes too. The toolkit's own scripts stay, so you can reinstall.`n`nContinue?",
+            "Full uninstall", 'YesNo', 'Warning')
+        if ($answer -ne 'Yes') { Write-Log "Full uninstall cancelled."; return }
+        $removeArgs += '-Full'
+        $label = 'Removing everything'
+    }
+    Start-Tracked $installed $removeArgs (Join-Path $script:Root 'toolkit\uninstall.status.log') $label
 })
 
 $btnCheck.Add_Click({

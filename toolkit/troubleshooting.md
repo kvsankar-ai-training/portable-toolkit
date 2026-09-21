@@ -186,8 +186,21 @@ failed, the account cannot write to either location, which is worth reporting.
 ```
 
 That removes the toolkit's user PATH entries and, if Px was registered to start
-at logon, stops it and deregisters it. It then tells you to delete the folder,
-which it cannot do while running from inside it.
+at logon, stops it and deregisters it. It leaves the files alone.
+
+To delete the installed tools as well, add `-Full`:
+
+```powershell
+<root>\toolkit\uninstall.ps1 -Full
+```
+
+That removes every tool and the Python environment, which is nearly all of the
+disk space, and with it anything you installed into that Python. The toolkit's
+own scripts stay, because the script doing the deleting is one of them, so the
+last step - deleting the folder - is still yours.
+
+`GUI.cmd` does the same: choose Basic or Full beside the buttons, then press
+Uninstall. Full asks for confirmation first.
 
 ## Antivirus quarantined the toolkit
 
