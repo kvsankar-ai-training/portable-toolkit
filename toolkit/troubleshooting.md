@@ -6,7 +6,7 @@ The window closed before you could read it. Open PowerShell in the toolkit
 folder and run the installer directly so the error stays on screen:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\toolkit\install.ps1
 ```
 
 ## "cannot be loaded because running scripts is disabled on this system"
@@ -188,3 +188,33 @@ failed, the account cannot write to either location, which is worth reporting.
 That removes the toolkit's user PATH entries and, if Px was registered to start
 at logon, stops it and deregisters it. It then tells you to delete the folder,
 which it cannot do while running from inside it.
+
+## Antivirus quarantined the toolkit
+
+Behavioural antivirus engines watch what a program does rather than what it
+contains. This installer downloads executables, writes them to a folder, adds
+that folder to PATH and runs them, which is also what a malware dropper does.
+Some engines act on that pattern.
+
+Observed on Bitdefender, detection name `Atc4.Detection` from Active Threat
+Control: sixteen files quarantined across two waves, including the installed
+copies of every script, both `.cmd` entry points, and the original `install.ps1`
+in the source folder it was run from. Disabling the engine did not release the
+files; the quarantine records held a lock on those exact paths until they were
+restored or deleted through the antivirus console.
+
+Nothing here is a false claim about the software: the behaviour really is what
+the engine describes. There is no way to work around it from inside the toolkit
+and no attempt should be made.
+
+What to do:
+
+1. Record the detection name and the list of files. It is evidence that the
+   detection is heuristic rather than a signature match.
+2. Report it to whoever runs endpoint security, and ask for the install root
+   and the download folder to be excluded, including in the behavioural engine,
+   which is usually configured separately from the file scanner.
+3. Do not re-run setup until that is in place. Each run risks another wave.
+
+On a managed machine a participant can do none of this themselves, so it needs
+to be resolved before a session rather than during one.

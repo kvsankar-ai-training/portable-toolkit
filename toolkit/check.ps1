@@ -16,9 +16,12 @@ foreach ($tool in $config.tools) {
     $exe = Join-Path $Root ($tool.verify[0] -replace '/', '\')
     $expected[$tool.name] = $exe
     if (Test-Path $exe) {
-        Write-Host ("{0,-7} {1}" -f $tool.name, (& $exe $tool.verify[1] 2>&1 | Select-Object -First 1)) -ForegroundColor Green
+        Write-Host ("{0,-9} {1}" -f $tool.name, (& $exe $tool.verify[1] 2>&1 | Select-Object -First 1)) -ForegroundColor Green
+    } elseif ($tool.tier -eq 'optional') {
+        # Absent by default, so this is information rather than a fault.
+        Write-Host ("{0,-9} not installed (optional)" -f $tool.name) -ForegroundColor DarkGray
     } else {
-        Write-Host ("{0,-7} not installed" -f $tool.name) -ForegroundColor Red
+        Write-Host ("{0,-9} not installed" -f $tool.name) -ForegroundColor Red
         $missing++
     }
 }
@@ -26,10 +29,30 @@ foreach ($tool in $config.tools) {
 $python = Join-Path $Root "$($config.python.environment)\Scripts\python.exe"
 $expected['python'] = $python
 if (Test-Path $python) {
-    Write-Host ("{0,-7} {1}" -f 'python', (& $python --version)) -ForegroundColor Green
+    Write-Host ("{0,-9} {1}" -f 'python', (& $python --version)) -ForegroundColor Green
 } else {
-    Write-Host ("{0,-7} not installed" -f 'python') -ForegroundColor Red
+    Write-Host ("{0,-9} not installed" -f 'python') -ForegroundColor Red
     $missing++
+}
+
+# The document libraries, which are the reason most people install the extras.
+$optionalPackages = @($config.python.optional_packages)
+if ($optionalPackages.Count -and (Test-Path $python)) {
+    $probe = 'markitdown', 'docx', 'pptx', 'openpyxl', 'pandas', 'pdfplumber', 'pypdf', 'PIL'
+    $found = & $python -c "
+import importlib.util, sys
+names = sys.argv[1:]
+print(','.join(n for n in names if importlib.util.find_spec(n) is not None))
+" @probe 2>$null
+    $have = @($found -split ',' | Where-Object { $_ })
+    if ($have.Count -eq $probe.Count) {
+        Write-Host ("{0,-9} all {1} document libraries present" -f 'packages', $probe.Count) -ForegroundColor Green
+    } elseif ($have.Count -eq 0) {
+        Write-Host ("{0,-9} document libraries not installed (optional)" -f 'packages') -ForegroundColor DarkGray
+    } else {
+        Write-Host ("{0,-9} {1} of {2} document libraries: missing {3}" -f 'packages', $have.Count, $probe.Count,
+            (($probe | Where-Object { $have -notcontains $_ }) -join ', ')) -ForegroundColor Yellow
+    }
 }
 
 # The question that actually matters: does a bare command name reach these files?

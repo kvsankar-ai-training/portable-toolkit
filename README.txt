@@ -16,6 +16,11 @@ WHAT TO DO
 
 2. Double-click SETUP.cmd.
 
+   Or double-click SETUP-WITH-EXTRAS.cmd to add the optional extras as well:
+   ripgrep, jq, and the Python libraries for reading and writing Word, Excel,
+   PowerPoint and PDF files. That downloads a few hundred MB more. You can run
+   it later instead; nothing is lost by starting with SETUP.cmd.
+
 3. Answer the question at the end. Enter accepts yes.
 
 It downloads about 130 MB, uses about 320 MB once installed, and takes a few
@@ -106,6 +111,35 @@ for your network, put it in toolkit\site.json (copy toolkit\site.example.json
 and fill it in). The GUI reads it to pre-fill the proxy field. site.json is
 not part of the public repo; get it from whoever runs your training or set up
 your network, separately from this download.
+
+
+OPTIONAL EXTRAS
+---------------
+
+SETUP.cmd installs what you need to have a working Python, Node and Git. The
+extras are everything beyond that:
+
+  ripgrep    fast search across a folder of files
+  jq         command-line tool for JSON
+  Python libraries for documents:
+             markitdown   reads Word, PDF, Excel, PowerPoint, HTML and CSV
+             python-docx  writes Word files
+             python-pptx  writes PowerPoint files
+             openpyxl     reads and writes Excel files
+             pandas       working with tables of data
+             pdfplumber   pulling text and tables out of PDFs
+             pypdf        splitting, merging and rearranging PDFs
+             Pillow       images
+
+Install them at any time by running SETUP-WITH-EXTRAS.cmd, or:
+
+    C:\tools\toolkit\install.ps1 -IncludeOptional   (from PowerShell)
+
+Reading a document is one call. The assistant will write the script; this is
+what it looks like:
+
+    from markitdown import MarkItDown
+    print(MarkItDown().convert("report.docx").text_content)
 
 
 IF SOMETHING GOES WRONG

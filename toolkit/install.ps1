@@ -17,7 +17,12 @@ param(
     # Skips the "Add them? [Y/n]" prompt and proceeds as if Enter was pressed,
     # so this can be run from something other than an interactive console, such
     # as gui.ps1. Everything else behaves exactly the same.
-    [switch] $Unattended
+    [switch] $Unattended,
+
+    # Also installs everything tools.json marks as optional: the extra tools and
+    # the document libraries. Without it the install is the smaller set that is
+    # enough to have a working Python, Node and Git.
+    [switch] $IncludeOptional
 )
 
 $ErrorActionPreference = 'Stop'
@@ -94,7 +99,11 @@ function Install-Tool($tool) {
     $dest = Join-Path $InstallRoot $tool.target
     if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 
-    if ($tool.strip_root) {
+    if ($tool.archive -eq 'none') {
+        # Not an archive at all, just the executable. jq is published this way.
+        New-Item -ItemType Directory $dest -Force | Out-Null
+        Move-Item $zip (Join-Path $dest $tool.file_name) -Force
+    } elseif ($tool.strip_root) {
         # This archive wraps everything in one folder; unwrap it so paths stay short.
         $stage = Join-Path $env:TEMP "portable-toolkit-$($tool.name)-stage"
         if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
@@ -105,7 +114,8 @@ function Install-Tool($tool) {
         Expand-Archive -Path $zip -DestinationPath $dest -Force
     }
 
-    Remove-Item $zip -Force
+    # Already gone when the download was the executable itself and was moved.
+    if (Test-Path $zip) { Remove-Item $zip -Force }
     if (-not (Test-Tool $tool)) { throw "$($tool.name): installed, but it does not run." }
     Write-Host "  installed and runs" -ForegroundColor Green
     Write-Status $tool.name 'installed'
@@ -158,7 +168,14 @@ Show-MachineWideTools
 
 try {
 
+$optional = @($config.tools | Where-Object { $_.tier -eq 'optional' })
+if ($optional.Count -and -not $IncludeOptional) {
+    Write-Host "Skipping the optional extras: $(($optional | ForEach-Object { $_.name }) -join ', '), and the document libraries." -ForegroundColor DarkGray
+    Write-Host "Run SETUP.cmd again with the extras, or install.ps1 -IncludeOptional, to add them.`n" -ForegroundColor DarkGray
+}
+
 foreach ($tool in $config.tools) {
+    if ($tool.tier -eq 'optional' -and -not $IncludeOptional) { continue }
     Write-Host "$($tool.name) $($tool.version)"
     if (Test-Tool $tool) {
         Write-Host "  already installed" -ForegroundColor DarkGray
@@ -186,9 +203,13 @@ if (Test-Path (Join-Path $envDir 'Scripts\python.exe')) {
 Write-Host "  one shared environment at $envDir" -ForegroundColor Green
 Write-Status 'python' 'installed'
 
-if ($config.python.packages.Count -gt 0) {
-    Write-Host "`nPackages"
-    Invoke-Uv pip install @($config.python.packages)
+$packages = @($config.python.packages)
+if ($IncludeOptional) { $packages += @($config.python.optional_packages) }
+if ($packages.Count -gt 0) {
+    Write-Host "`nPython packages"
+    Write-Status 'packages' 'installing'
+    Invoke-Uv pip install @packages
+    Write-Status 'packages' 'installed'
 }
 
 # Keep the scripts and the manifest beside what they installed, so the folder

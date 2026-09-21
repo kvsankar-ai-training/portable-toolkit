@@ -71,6 +71,28 @@ contained.
 Add the package to the `python.packages` list in `toolkit\tools.json` as well,
 so a fresh install gets it too.
 
+## Documents
+
+The document libraries are optional and are not installed by `SETUP.cmd`. Check
+first with `check.ps1`, which reports how many are present. To add them, run
+`SETUP-WITH-EXTRAS.cmd`, or `toolkit\install.ps1 -IncludeOptional`.
+
+Reading any of docx, pdf, xlsx, pptx, html or csv is one call:
+
+```python
+from markitdown import MarkItDown
+print(MarkItDown().convert("report.docx").text_content)
+```
+
+Writing uses the format libraries: `python-docx` for Word, `python-pptx` for
+PowerPoint, `openpyxl` for Excel. `pdfplumber` gets text and tables out of a
+PDF when markitdown's plain text is not enough, and `pypdf` splits and merges.
+
+What this toolkit cannot do, and should say so rather than guess: convert
+between formats with full fidelity, or edit a document in place while
+preserving everything it does not understand. Those need LibreOffice or
+Microsoft Office, neither of which this installs.
+
 ## Adding a tool
 
 Add an entry to `toolkit\tools.json` with its version, URL, the SHA-256
