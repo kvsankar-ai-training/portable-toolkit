@@ -9,6 +9,12 @@ installer, and you can delete it afterwards.
 Running it again only installs what is missing.
 #>
 
+param(
+    # Overrides install.root from tools.json. Exists so the shipped manifest can
+    # be tested without editing it, which is how a bad default slipped through.
+    [string] $Root
+)
+
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # without this, downloads are very slow
 
@@ -22,7 +28,15 @@ Get-ChildItem (Split-Path -Parent $Source) -Recurse -File | Unblock-File -ErrorA
 
 function Select-InstallRoot {
     # C:\tools if the machine allows it, the user profile if it does not.
-    foreach ($candidate in @($config.install.root, $config.install.fallback_root)) {
+    $candidates = if ($Root) { @($Root) } else { @($config.install.root, $config.install.fallback_root) }
+    foreach ($candidate in $candidates) {
+        # A tab or a newline here means a single backslash in tools.json, where
+        # JSON reads \t as a tab. Name that cause rather than letting Windows
+        # report a puzzling "Illegal characters in path" from deeper down.
+        if ($candidate -match '[\x00-\x1f]') {
+            throw ("Install path in tools.json contains a control character: '$($candidate -replace '[\x00-\x1f]', '?')'. " +
+                   "A Windows path in JSON needs doubled backslashes, or forward slashes instead.")
+        }
         $path = [Environment]::ExpandEnvironmentVariables($candidate)
         try {
             if (-not (Test-Path $path)) { New-Item -ItemType Directory $path -ErrorAction Stop | Out-Null }

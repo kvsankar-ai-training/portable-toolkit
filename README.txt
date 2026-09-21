@@ -9,7 +9,8 @@ WHAT TO DO
 ----------
 
 1. Right-click the zip you downloaded, choose Properties, tick Unblock, click OK.
-   Then extract it. Skipping this makes step 2 fail on some machines.
+   Then extract it. SETUP.cmd clears that mark itself as well, so this is a
+   belt-and-braces step rather than a required one.
 
 2. Double-click SETUP.cmd.
 

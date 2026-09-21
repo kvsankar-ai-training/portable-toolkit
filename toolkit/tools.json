@@ -3,8 +3,8 @@
   "comment": "Tool paths are relative to the install root. Adding a tool is an edit to this file, not to install.ps1.",
 
   "install": {
-    "root": "C:\tools",
-    "fallback_root": "%USERPROFILE%\tools"
+    "root": "C:/tools",
+    "fallback_root": "%USERPROFILE%/tools"
   },
 
   "tools": [
