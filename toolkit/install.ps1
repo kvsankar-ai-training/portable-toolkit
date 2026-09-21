@@ -127,6 +127,8 @@ function Show-MachineWideTools {
     Write-Host ""
 }
 
+Write-Host "`nportable-toolkit $($config.version)"
+
 $InstallRoot = Select-InstallRoot
 Write-Host "`nInstalling into $InstallRoot`n"
 Show-MachineWideTools

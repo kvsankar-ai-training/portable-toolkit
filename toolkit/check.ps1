@@ -7,6 +7,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 $config = Get-Content (Join-Path $PSScriptRoot 'tools.json') -Raw | ConvertFrom-Json
 . (Join-Path $PSScriptRoot 'paths.ps1')
 
+Write-Host "portable-toolkit $($config.version)"
 Write-Host "Install root: $Root`n"
 
 $missing = 0
