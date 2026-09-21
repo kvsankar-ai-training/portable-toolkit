@@ -197,7 +197,8 @@ addresses, whether those proxies answer, whether Windows can reach the sites
 the tools come from, whether `uv` can reach them with and without a proxy, and
 what state Px is in.
 
-Send the whole output when reporting a problem. The useful distinction it draws
+Send the whole output when reporting a problem - the GUI has a Copy button
+above its log for exactly that. The useful distinction it draws
 is between Windows reaching a site and `uv` reaching it: the tools download
 through Windows, `uv` does not, and a failure in one and not the other points
 straight at the proxy handling rather than at the network.

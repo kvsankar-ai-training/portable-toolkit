@@ -297,14 +297,50 @@ $grpCopilot.Controls.Add($lblCopilotHint)
 
 # ---- log --------------------------------------------------------------------
 
+# A quiet button above the log, right-aligned. Reporting a problem means
+# sending this text, and selecting it by hand in a read-only box is awkward.
+$btnCopyLog = New-Object System.Windows.Forms.Button
+$btnCopyLog.Text = "Copy"
+$btnCopyLog.Size = New-Object System.Drawing.Size(62, 22)
+$btnCopyLog.Location = New-Object System.Drawing.Point(470, ($grpCopilot.Bottom + 6))
+$btnCopyLog.FlatStyle = 'Flat'
+$btnCopyLog.FlatAppearance.BorderColor = [System.Drawing.Color]::LightGray
+$btnCopyLog.ForeColor = [System.Drawing.Color]::DimGray
+$btnCopyLog.TabStop = $false
+$form.Controls.Add($btnCopyLog)
+
 $txtLog = New-Object System.Windows.Forms.TextBox
-$txtLog.Location = New-Object System.Drawing.Point(12, ($grpCopilot.Bottom + 8))
-$txtLog.Size = New-Object System.Drawing.Size(520, (676 - $grpCopilot.Bottom))
+$txtLog.Location = New-Object System.Drawing.Point(12, ($grpCopilot.Bottom + 32))
+$txtLog.Size = New-Object System.Drawing.Size(520, (652 - $grpCopilot.Bottom))
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = 'Vertical'
 $txtLog.ReadOnly = $true
 $txtLog.Font = New-Object System.Drawing.Font("Consolas", 9)
 $form.Controls.Add($txtLog)
+
+# Says "Copied" briefly, then goes back. Without that there is no sign it
+# worked, and people press it again.
+$copyReset = New-Object System.Windows.Forms.Timer
+$copyReset.Interval = 1200
+$copyReset.Add_Tick({ $btnCopyLog.Text = "Copy"; $copyReset.Stop() })
+
+function Copy-LogToClipboard {
+    # A function rather than the body of the click handler, so it can be
+    # exercised without a window on screen.
+    if (-not $txtLog.Text) { $btnCopyLog.Text = "Empty"; $copyReset.Start(); return $false }
+    $copied = $false
+    # Set-Clipboard is the tidy way; the WinForms call is the fallback for a
+    # host that does not have it.
+    try { Set-Clipboard -Value $txtLog.Text; $copied = $true } catch { }
+    if (-not $copied) {
+        try { [System.Windows.Forms.Clipboard]::SetText($txtLog.Text); $copied = $true } catch { }
+    }
+    $btnCopyLog.Text = if ($copied) { "Copied" } else { "Failed" }
+    $copyReset.Start()
+    $copied
+}
+
+$btnCopyLog.Add_Click({ [void](Copy-LogToClipboard) })
 
 function Write-Log($text) {
     $txtLog.AppendText("$text`r`n")
