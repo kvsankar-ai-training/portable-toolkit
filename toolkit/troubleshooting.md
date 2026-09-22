@@ -57,28 +57,48 @@ uv: downloading
 overall: error - The remote server returned an error: (502) Bad Gateway.
 ```
 
-Nothing is wrong with uv. That is the very first download, and a 502 comes from
-a proxy that accepted the request and could not complete it - so this machine
-reached a proxy, and the proxy did not reach the internet. The usual reasons
-are that the proxy is only reachable from inside the corporate network and you
-are somewhere else, that the address it was given is stale, or that the site is
-not one it is allowed to fetch.
+Nothing is wrong with uv. That is the very first download, and a 502 is a proxy
+saying it accepted the request and could not complete it - so this machine
+reached a proxy and got an answer, and the proxy did not reach the site. A
+proxy that could not be reached at all fails differently, so this is not a
+connectivity problem between you and it.
 
-Setup names the proxy it used, and tries once without it, because a proxy that
-is in the way is not always one you have to go through. If that second attempt
-works the install carries on and says so in the log.
+Setup names the proxy it used and says which setting picked it, then tries once
+without it, because a proxy that is in the way is not always one you have to go
+through. If that second attempt works the install carries on and says so.
 
 If it does not, setup stops and the window runs the network check by itself, so
 the log already holds the answer. Press **Copy** above the log and send it.
 
-Worth trying, in this order:
+### On a VPN
 
-- Run it again on the corporate network, or with the VPN connected.
-- Read the network check's "What Windows would use for each address". If it
-  names a proxy you do not recognise, that setting is the problem rather than
-  the network.
-- If the proxy wants credentials rather than failing outright, the next section
-  is the one you want.
+This is the common case, and connecting the VPN is not the fix - the proxy
+answered, so the VPN was already carrying traffic to it. What changes on a VPN
+is which proxy gets picked and whether that proxy serves clients on the VPN's
+addresses at all. Some networks run one proxy for the building and another for
+remote clients, and an automatic configuration script that is right on site
+hands out the wrong one from home.
+
+So compare the two. The network check's "What Windows would use for each
+address" names the proxy, and the log line from setup says whether an automatic
+configuration script chose it. If that proxy differs from the one a machine in
+the office resolves, the configuration script is picking a proxy you cannot
+use, which is a question for whoever runs the network rather than something to
+work around.
+
+If they name the proxy remote clients should use, setup will take it ahead of
+whatever Windows would have picked. Run it from a console rather than the
+window, because this sets the address for that console only:
+
+```powershell
+$env:HTTPS_PROXY = 'http://the-proxy-they-named:8080'
+.\SETUP.cmd
+```
+
+Setup ignores the setting if nothing is listening at that address, so a typo
+falls back to the normal route rather than breaking the install outright. If
+the proxy also wants credentials, it is Px you want, not this - see the 407
+section below.
 
 ## The proxy answers with 407, and setting HTTPS_PROXY is not enough
 

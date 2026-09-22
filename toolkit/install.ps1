@@ -226,13 +226,24 @@ function Get-DownloadArgs($Uri, $OutFile) {
     # is why this is built per download rather than set once.
     $splat = @{ Uri = $Uri; OutFile = $OutFile; UseBasicParsing = $true }
 
+    # Which of those picked it matters when it then misbehaves: a stale
+    # HTTPS_PROXY is yours to fix, a proxy an automatic configuration script
+    # chose is not, and the two need different answers. Record it here, where
+    # it is known, so a failure can say so.
     $proxy = $null
+    $script:ProxyOrigin = ''
     if ($env:HTTPS_PROXY -and (Test-ProxyReachable $env:HTTPS_PROXY)) {
         $proxy = $env:HTTPS_PROXY
+        $script:ProxyOrigin = 'from the HTTPS_PROXY setting'
     } else {
         try {
             $resolved = [System.Net.WebRequest]::GetSystemWebProxy().GetProxy($Uri)
-            if ($resolved -and $resolved.AbsoluteUri -ne $Uri) { $proxy = $resolved.AbsoluteUri }
+            if ($resolved -and $resolved.AbsoluteUri -ne $Uri) {
+                $proxy = $resolved.AbsoluteUri
+                $ie = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
+                $script:ProxyOrigin = if ($ie.AutoConfigURL) { "chosen by the automatic configuration script at $($ie.AutoConfigURL)" }
+                                      else { 'from this machine''s Windows proxy setting' }
+            }
         } catch { }
     }
 
@@ -296,7 +307,7 @@ function Install-Tool($tool) {
     Write-Host "  downloading $($tool.url)"
     $download = Get-DownloadArgs $tool.url $zip
     $hadProxy = $download.ContainsKey('Proxy')
-    $via = if ($hadProxy) { $download.Proxy } else { 'no proxy - straight out' }
+    $via = if ($hadProxy) { "$($download.Proxy) ($script:ProxyOrigin)" } else { 'no proxy - straight out' }
     Write-Host "  via $via"
 
     try {
@@ -315,7 +326,7 @@ function Install-Tool($tool) {
             Write-Host "  $via returned $status; trying without it" -ForegroundColor Yellow
             Write-LogLine "$via returned $status for $($tool.name); retrying without a proxy."
             try {
-                Invoke-WebRequest -Uri $tool.url -OutFile $zip -UseBasicParsing
+                Invoke-WebRequest -Uri $tool.url -OutFile $zip -UseBasicParsing -TimeoutSec 30
                 Write-Host "  that worked - the proxy was the problem, not the network" -ForegroundColor Green
                 Write-LogLine "Downloading without the proxy worked."
                 $recovered = $true
