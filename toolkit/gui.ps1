@@ -52,6 +52,23 @@ function Test-PxListening {
     } catch { return $false }
 }
 
+function Test-UpstreamReachable {
+    # Whether the proxy Px has been told to relay to can be reached from where
+    # this machine is now. A saved proxy is a company address; carry the laptop
+    # home and it is simply not there any more.
+    $server = Get-SavedPxProxy
+    if (-not $server) { return $false }
+    try {
+        $parts = $server -replace '^\w+://', ''
+        $hostName, $port = $parts.Split(':', 2)
+        if (-not $port) { $port = 8080 }
+        $c = New-Object System.Net.Sockets.TcpClient
+        $ok = $c.ConnectAsync($hostName, [int] $port).Wait(2000)
+        $c.Close()
+        return $ok
+    } catch { return $false }
+}
+
 function Start-PxForCopilot {
     # Copilot is the reason Px is here: it cannot get through an authenticating
     # proxy on its own. Starting Copilot without Px running, on a network that
@@ -62,8 +79,20 @@ function Start-PxForCopilot {
     $px = Get-PxPath
     if (-not (Test-Path $px)) { return $false }
 
+    # Px listening is not the same as Px working. It binds its port wherever it
+    # is, so on a network that cannot see the saved proxy it accepts every
+    # connection and fails every request - which reads as "tunnel error" in
+    # Copilot. Sending the app through it then is worse than not using it.
+    $saved = Get-SavedPxProxy
+    if ($saved -and -not (Test-UpstreamReachable)) {
+        Write-Log "The saved proxy $saved cannot be reached from this network, so Px was not used."
+        Write-Log "Copilot will start without a proxy. Press Stop under Px if it is running and still interfering."
+        Remove-Item env:HTTP_PROXY, env:HTTPS_PROXY -ErrorAction SilentlyContinue
+        return $false
+    }
+
     if (-not (Test-PxListening)) {
-        if (-not (Get-SavedPxProxy)) {
+        if (-not $saved) {
             Write-Log "Px has no proxy saved, so it was not started. If Copilot cannot sign in, put the address above and press Save & start."
             return $false
         }

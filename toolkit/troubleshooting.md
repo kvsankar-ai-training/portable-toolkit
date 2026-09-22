@@ -251,6 +251,30 @@ case.
 If you would rather point `uv` somewhere yourself, setup leaves an existing
 `HTTPS_PROXY` alone, provided something is listening on it.
 
+## Copilot worked at the office and fails at home, with a tunnel error
+
+The proxy Px relays to is a company address. Take the laptop somewhere else and
+it is simply not there, so Px accepts every connection on its own port and
+fails every request behind it - which reaches Copilot as a connect or tunnel
+error. Px running is not the same as Px working.
+
+The Launch button checks this now: where the saved proxy cannot be reached from
+the network you are on, Px is not used and Copilot starts without a proxy,
+with a line in the log saying so. If Px is already running from an earlier
+session, press **Stop** under Px first, or:
+
+```powershell
+<root>\run.cmd px --quit
+```
+
+If you set `HTTPS_PROXY` permanently on your account at some point, that
+survives all of this and will still point at Px. Clear it under Settings, Edit
+environment variables for your account, or expect to do this every time the
+laptop changes network.
+
+Nothing needs undoing when you go back to the office: the saved proxy becomes
+reachable again and Px is used as before.
+
 ## "checksum mismatch"
 
 The file that arrived is not the file that was published. The usual cause is a
