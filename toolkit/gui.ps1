@@ -294,6 +294,8 @@ $grpProgress.Location = New-Object System.Drawing.Point(12, ($grpSetup.Bottom + 
 $grpProgress.Size = New-Object System.Drawing.Size(520, (44 + 20 * $rows))
 $form.Controls.Add($grpProgress)
 
+$rowLabels = @{ 'machine-python' = 'machine py'; 'packages' = 'libraries' }
+
 function Add-StatusColumn($Names, $Heading, $X, $Width) {
     $lblHead = New-Object System.Windows.Forms.Label
     $lblHead.Text = $Heading
@@ -305,16 +307,18 @@ function Add-StatusColumn($Names, $Heading, $X, $Width) {
     $y = 40
     foreach ($name in $Names) {
         $lblName = New-Object System.Windows.Forms.Label
-        $lblName.Text = $name
+        # The status key and the word on screen are not always the same:
+        # "machine-python" is what the installer reports and does not fit.
+        $lblName.Text = if ($rowLabels.ContainsKey($name)) { $rowLabels[$name] } else { $name }
         $lblName.Location = New-Object System.Drawing.Point($X, $y)
-        $lblName.Size = New-Object System.Drawing.Size(62, 18)
+        $lblName.Size = New-Object System.Drawing.Size(72, 18)
         $grpProgress.Controls.Add($lblName)
 
         $lblState = New-Object System.Windows.Forms.Label
         $lblState.Text = "checking..."
         $lblState.ForeColor = [System.Drawing.Color]::Gray
-        $lblState.Location = New-Object System.Drawing.Point(($X + 66), $y)
-        $lblState.Size = New-Object System.Drawing.Size(($Width - 66), 18)
+        $lblState.Location = New-Object System.Drawing.Point(($X + 76), $y)
+        $lblState.Size = New-Object System.Drawing.Size(($Width - 76), 18)
         $grpProgress.Controls.Add($lblState)
 
         $script:statusLabels[$name] = $lblState
@@ -322,8 +326,8 @@ function Add-StatusColumn($Names, $Heading, $X, $Width) {
     }
 }
 
-Add-StatusColumn $basicNames 'Tools' 15 240
-Add-StatusColumn $fullNames  'Python' 270 235
+Add-StatusColumn $basicNames 'Tools' 15 225
+Add-StatusColumn $fullNames  'Python' 250 255
 
 # ---- px group ---------------------------------------------------------------
 
@@ -440,8 +444,8 @@ $form.Controls.Add($btnCopyLog)
 # together are the whole of "tell someone what went wrong".
 $btnNetCheck = New-Object System.Windows.Forms.Button
 $btnNetCheck.Text = "Network check"
-$btnNetCheck.Size = New-Object System.Drawing.Size(100, 22)
-$btnNetCheck.Location = New-Object System.Drawing.Point(($logLeft + $logWidth - 62 - 6 - 100), ($logTop - 24))
+$btnNetCheck.Size = New-Object System.Drawing.Size(112, 22)
+$btnNetCheck.Location = New-Object System.Drawing.Point(($logLeft + $logWidth - 62 - 6 - 112), ($logTop - 24))
 $btnNetCheck.FlatStyle = 'Flat'
 $btnNetCheck.FlatAppearance.BorderColor = [System.Drawing.Color]::LightGray
 $btnNetCheck.ForeColor = [System.Drawing.Color]::DimGray
@@ -515,6 +519,8 @@ function Set-ProgressState {
         'skipped'           { 'Skipped' }
         'not-asked-for'     { 'Not installed yet - click Install / Fix' }
         'not-needed'        { 'Not needed - python here is the toolkit''s' }
+        'machine-ready'     { 'Ready - this machine''s own Python, libraries added' }
+        'libraries-added'   { 'Libraries added to it' }
         'kept'              { 'Already installed, left as it is' }
         'left-running'      { 'Left running - needed to reinstall' }
         'done'              { 'Done' }
@@ -524,7 +530,7 @@ function Set-ProgressState {
     }
     $color = switch -Regex ($State) {
         'error'                                                      { [System.Drawing.Color]::Red; break }
-        'ready|installed|already-installed|updated|done'             { [System.Drawing.Color]::DarkGreen; break }
+        'ready|installed|already-installed|updated|done|machine-ready|libraries-added' { [System.Drawing.Color]::DarkGreen; break }
         'not-asked-for|not-needed'                                   { [System.Drawing.Color]::Gray; break }
         'not installed|needs-setup'                                  { [System.Drawing.Color]::DarkOrange; break }
         'pending'                                                    { [System.Drawing.Color]::Gray; break }
@@ -575,9 +581,22 @@ function Update-Status {
         if (-not $ready) { $allReady = $false }
     }
 
+    # Typing "python" on a machine that has one installed for all users reaches
+    # that one, and no user PATH can change it. Setup handles that by putting
+    # the document libraries there too, so it is a working state, not a fault -
+    # and saying "not ready" about a machine that works is worse than useless.
+    $machinePython = Get-MachineWidePython
+    $machineHandled = $machinePython -and (Test-Path (Get-MachinePythonMarker $script:Root))
+
     $pythonReady = Test-ToolReady 'python'
-    Set-ProgressState 'python' $(if ($pythonReady) { 'ready' } else { 'needs-setup' })
-    if (-not $pythonReady) { $allReady = $false }
+    if ($pythonReady) {
+        Set-ProgressState 'python' 'ready'
+    } elseif ($machineHandled) {
+        Set-ProgressState 'python' 'machine-ready'
+    } else {
+        Set-ProgressState 'python' 'needs-setup'
+        $allReady = $false
+    }
 
     # The document libraries. Looking for one of them on disk rather than asking
     # Python to import them, because this runs on a timer and launching an
@@ -589,15 +608,12 @@ function Update-Status {
     # user PATH, so the libraries have to be in that one too or an assistant
     # typing "python" finds none of them. Nothing to do where there is no such
     # Python, which is the common case off a corporate image.
-    $machinePython = Get-MachineWidePython
     if (-not $machinePython) {
         Set-ProgressState 'machine-python' 'not-needed'
-    } elseif (Test-Path (Get-MachinePythonMarker $script:Root)) {
-        Set-ProgressState 'machine-python' 'installed'
-    } elseif (Test-Path $marker) {
-        Set-ProgressState 'machine-python' 'needs-setup'
+    } elseif ($machineHandled) {
+        Set-ProgressState 'machine-python' 'libraries-added'
     } else {
-        Set-ProgressState 'machine-python' 'not-asked-for'
+        Set-ProgressState 'machine-python' 'needs-setup'
     }
 
     if ($allReady) {

@@ -73,6 +73,11 @@ $machinePaths = ([Environment]::GetEnvironmentVariable('Path', 'Machine') -split
 
 Write-Host "`nFound by name, as an assistant would call them:"
 $wrong = 0
+# A Python installed for all users cannot be displaced from a user account, so
+# setup puts the document libraries in it instead. Where that has happened,
+# "python" reaching it is the intended outcome and not a fault to be counted.
+$machinePython = Get-MachineWidePython
+$machineHandled = $machinePython -and (Test-Path (Get-MachinePythonMarker $Root))
 # Built from tools.json rather than hard-coded, so an added tool is checked
 # too. Two things it has to get right: the name to type is the executable's,
 # not the manifest's (ripgrep installs rg.exe); and a tool marked
@@ -96,20 +101,22 @@ foreach ($name in $names) {
         Write-Host ("  {0,-6} {1}" -f $name, $found) -ForegroundColor Green
     } else {
         $dir = (Split-Path -Parent $found).TrimEnd('\')
-        Write-Host ("  {0,-6} {1}" -f $name, $found) -ForegroundColor Yellow
-        if ($machinePaths -contains $dir) {
+        $isMachine = $machinePaths -contains $dir
+        $handledHere = $machineHandled -and $isMachine -and ($name -in 'python', 'pip')
+        $colour = if ($handledHere) { [System.ConsoleColor]::Green } else { [System.ConsoleColor]::Yellow }
+        Write-Host ("  {0,-6} {1}" -f $name, $found) -ForegroundColor $colour
+        if ($handledHere) {
+            Write-Host ("  {0,-6} ^ this machine's own, and setup put the document libraries in it" -f '') -ForegroundColor Green
+        } elseif ($isMachine) {
             Write-Host ("  {0,-6} ^ installed machine-wide; user PATH cannot override it" -f '') -ForegroundColor Yellow
+            $wrong++
         } else {
             Write-Host ("  {0,-6} ^ not the toolkit's copy" -f '') -ForegroundColor Yellow
+            $wrong++
         }
-        $wrong++
     }
 }
 
-# A Python installed for all users wins by name and cannot be displaced from a
-# user account, so setup adds the document libraries to it as well. Whether that
-# happened decides if a bare "python" can read a document on this machine.
-$machinePython = Get-MachineWidePython
 if ($machinePython) {
     Write-Host "`nA Python installed for all users answers to 'python' here:"
     Write-Host "  $machinePython"
