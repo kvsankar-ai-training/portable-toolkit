@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "1.0.27",
+  "version": "1.0.28",
   "comment": "Tool paths are relative to the install root. Adding a tool is an edit to this file, not to install.ps1. Most tools are a zip; set archive to \"none\" plus file_name when the download is the executable itself, as jq is. Set persistent_path to false if a tool should be reachable within run.cmd/env.ps1 but must not be added to the permanent user PATH - px needs this because it bundles its own python.exe, which would otherwise compete with the toolkit's real one. Set tier to \"optional\" for anything not needed to get working, which then installs only when setup is asked for the extras.",
   "install": {
     "root": "C:/tools",

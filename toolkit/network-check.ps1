@@ -28,7 +28,18 @@ if ($StatusLog) {
     }
 }
 
+# Report on the installed toolkit, not on whichever copy of this script is being
+# run. The window runs the copy in the extracted folder, where nothing is
+# installed, and the uv checks below would then say "not installed yet".
 $Root = Split-Path -Parent $PSScriptRoot
+try {
+    $manifest = Get-Content (Join-Path $PSScriptRoot 'tools.json') -Raw | ConvertFrom-Json
+    foreach ($candidate in @($manifest.install.root, $manifest.install.fallback_root)) {
+        if (-not $candidate) { continue }
+        $expanded = [Environment]::ExpandEnvironmentVariables(($candidate -replace '/', '\\'))
+        if (Test-Path (Join-Path $expanded 'uv\uv.exe')) { $Root = $expanded; break }
+    }
+} catch { }
 $targets = @(
     'https://github.com',
     'https://objects.githubusercontent.com',
@@ -91,6 +102,27 @@ foreach ($t in $targets) {
         try { $status = [int]$_.Exception.Response.StatusCode } catch { }
         if ($status) { Show ([Uri]$t).Host "reached (HTTP $status)" }
         else { Show ([Uri]$t).Host "COULD NOT CONNECT: $(($_.Exception.Message -split "`n")[0])" }
+    }
+}
+
+Write-Host "`nWho signed the connection (a company name here means TLS is inspected)" -ForegroundColor Cyan
+foreach ($t in $targets) {
+    $target = ([Uri] $t).Host
+    $client = $null
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        if (-not $client.ConnectAsync($target, 443).Wait(5000)) { Show $target 'no answer on 443'; continue }
+        # Accept whatever is presented. The question is who signed it, not
+        # whether to trust it, and refusing here would report nothing.
+        $ssl = New-Object System.Net.Security.SslStream($client.GetStream(), $false, { $true })
+        $ssl.AuthenticateAsClient($target)
+        $issuer = $ssl.RemoteCertificate.Issuer
+        $ssl.Dispose()
+        Show $target ((($issuer -split ',') | Where-Object { $_ -match 'CN=|^\s*O=' }) -join ' ').Trim()
+    } catch {
+        Show $target "could not look: $(($_.Exception.Message -split "`n")[0])"
+    } finally {
+        if ($client) { $client.Close() }
     }
 }
 

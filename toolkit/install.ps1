@@ -424,12 +424,17 @@ function Invoke-Uv {
     # failure, so judge these calls by their exit code instead.
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    & uv @args 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray; Write-LogLine $_ }
+    $output = & uv @args 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray; Write-LogLine $_; $_ }
     $code = $LASTEXITCODE
     $ErrorActionPreference = $previous
     if ($code -ne 0) {
         $hint = ''
-        if (-not $env:HTTPS_PROXY) {
+        if ("$output" -match 'UnknownIssuer|invalid peer certificate|certificate verify failed') {
+            $hint = " That is a certificate uv does not recognise, which is what a network that inspects TLS looks like. " +
+                    "uv is already told to use this machine's certificate store; if it still fails, the company authority " +
+                    "is missing from your user store. Run toolkit
+etwork-check.ps1 - it names who signed the connection."
+        } elseif (-not $env:HTTPS_PROXY) {
             $hint = " If this is a DNS or connection error, uv may need the proxy address for this network: " +
                     "set HTTPS_PROXY and run setup again."
         } elseif ($code -ne 0) {

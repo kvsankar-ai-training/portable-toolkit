@@ -262,6 +262,55 @@ is between Windows reaching a site and `uv` reaching it: the tools download
 through Windows, `uv` does not, and a failure in one and not the other points
 straight at the proxy handling rather than at the network.
 
+## Python fails with "invalid peer certificate: UnknownIssuer"
+
+The tools install, then Python does not:
+
+```
+error: Failed to install cpython-3.13.15-windows-x86_64-none
+cause: client error (Connect)
+cause: invalid peer certificate: UnknownIssuer
+```
+
+The network is inspecting TLS. Every connection is intercepted and re-signed by
+a company certificate authority, and this machine trusts it - which is why the
+tool downloads, which go through Windows, worked. `uv` carries its own copy of
+the public authorities and consults nothing else, so the company signature is
+one it has never seen.
+
+Setup tells `uv` to use this machine's certificate store instead. That weakens
+nothing: the certificates come from the store Windows already trusts.
+
+Run the network check if it still fails. Its "Who signed the connection" section
+names the authority for each address. A company name there confirms inspection;
+public names like Sectigo, Let's Encrypt or GlobalSign mean this is not your
+problem.
+
+If the company authority is named and `uv` still refuses, hand it the
+certificates as a file:
+
+```powershell
+$pem = "$env:USERPROFILE\corp-roots.pem"
+Get-ChildItem Cert:\LocalMachine\Root | ForEach-Object {
+    "-----BEGIN CERTIFICATE-----"
+    [Convert]::ToBase64String($_.RawData, 'InsertLineBreaks')
+    "-----END CERTIFICATE-----"
+} | Set-Content $pem
+$env:SSL_CERT_FILE = $pem
+.\SETUP.cmd
+```
+
+That lasts for that console. `SSL_CERT_FILE` is read by `uv`, and by Python
+afterwards.
+
+## The tools download but objects.githubusercontent.com times out
+
+Every GitHub release file is served from that host, not from `github.com`. A
+network can allow one and not the other, and then `github.com` looks reachable
+while nothing actually downloads. The network check tests both separately for
+this reason. If it reports `COULD NOT CONNECT` for
+`objects.githubusercontent.com`, that host is what to ask about.
+
 ## The Python or package download fails at the proxy
 
 The tools install, then `uv` fails - with a DNS error, a connection timeout,

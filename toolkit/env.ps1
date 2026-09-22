@@ -24,6 +24,14 @@ $env:UV_PYTHON_BIN_DIR      = Join-Path $Root 'bin'
 $env:UV_PROJECT_ENVIRONMENT = $envDir   # stops "uv sync" creating a .venv
 $env:VIRTUAL_ENV            = $envDir   # tells "uv pip install" where to install
 
+# uv ships its own copy of the public certificate authorities and ignores the
+# machine's. On a network that inspects TLS, every connection is re-signed by a
+# company authority that Windows trusts and uv has never heard of, so uv refuses
+# with "invalid peer certificate: UnknownIssuer" while a browser on the same
+# machine is perfectly happy. This tells uv to trust what Windows trusts. It
+# lowers nothing: the certificates come from this machine's own store.
+$env:UV_SYSTEM_CERTS        = 'true'
+
 # Built in one go, in the order Get-ToolkitPaths returns. Prepending them one at
 # a time reverses that order, which put px - and so px's own bundled python.exe -
 # ahead of the toolkit's real Python, and "run.cmd python" then ran the wrong
