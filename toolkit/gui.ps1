@@ -236,14 +236,15 @@ $grpSetup.Location = New-Object System.Drawing.Point(12, 68)
 $grpSetup.Size = New-Object System.Drawing.Size(520, 96)
 $form.Controls.Add($grpSetup)
 
-# The extras are added on top of the tools, not installed instead of them, so
-# this is a tick box rather than a choice between two modes. Leaving it unticked
-# and running again later adds them; nothing has to be undone first.
-$chkExtras = New-Object System.Windows.Forms.CheckBox
-$chkExtras.Text = "Also install the extras - document libraries, ripgrep and jq"
-$chkExtras.Location = New-Object System.Drawing.Point(15, 20)
-$chkExtras.Size = New-Object System.Drawing.Size(490, 20)
-$grpSetup.Controls.Add($chkExtras)
+# One install, not a choice. Every lab past reading a document needs the
+# document libraries, so an install without them is a state nobody should be
+# able to end up in by leaving a box unticked.
+$lblSetupHint = New-Object System.Windows.Forms.Label
+$lblSetupHint.Text = "Installs the tools, Python, and the libraries that read documents"
+$lblSetupHint.Location = New-Object System.Drawing.Point(15, 22)
+$lblSetupHint.Size = New-Object System.Drawing.Size(490, 20)
+$lblSetupHint.ForeColor = [System.Drawing.Color]::DimGray
+$grpSetup.Controls.Add($lblSetupHint)
 
 $btnInstall = New-Object System.Windows.Forms.Button
 $btnInstall.Text = "Install / Fix"
@@ -277,12 +278,12 @@ $grpSetup.Controls.Add($btnRemoveAll)
 # the time: what is installed right now. It only reports progress while setup is
 # running.
 #
-# Split the same way the Setup buttons offer, so a Basic install does not list
-# three things as missing that were never asked for. Both columns come from
-# tools.json, so adding a tool there is still the only edit needed - which side
-# it lands on follows its tier.
-$basicNames = @($config.tools | Where-Object { $_.tier -ne 'optional' } | ForEach-Object { $_.name }) + @('python')
-$fullNames  = @($config.tools | Where-Object { $_.tier -eq 'optional' } | ForEach-Object { $_.name }) + @('packages', 'machine-python')
+# Two columns for the shape of the window, not because there are two kinds of
+# install. The left is what you type a name to run, the right is Python and what
+# it can read. The tool list still comes from tools.json, so adding a tool there
+# remains the only edit needed.
+$basicNames = @($config.tools | ForEach-Object { $_.name })
+$fullNames  = @('python', 'packages', 'machine-python')
 $script:statusLabels = @{}
 
 $rows = [Math]::Max($basicNames.Count, $fullNames.Count)
@@ -321,8 +322,8 @@ function Add-StatusColumn($Names, $Heading, $X, $Width) {
     }
 }
 
-Add-StatusColumn $basicNames 'Basic' 15 240
-Add-StatusColumn $fullNames  'Extras' 270 235
+Add-StatusColumn $basicNames 'Tools' 15 240
+Add-StatusColumn $fullNames  'Python' 270 235
 
 # ---- px group ---------------------------------------------------------------
 
@@ -512,7 +513,7 @@ function Set-ProgressState {
         'updating'          { 'Updating...' }
         'updated'           { 'Done' }
         'skipped'           { 'Skipped' }
-        'not-asked-for'     { 'Not installed - tick the extras box to add' }
+        'not-asked-for'     { 'Not installed yet - click Install / Fix' }
         'not-needed'        { 'Not needed - python here is the toolkit''s' }
         'kept'              { 'Already installed, left as it is' }
         'left-running'      { 'Left running - needed to reinstall' }
@@ -556,12 +557,10 @@ function Update-Status {
     # the progress labels; overwriting them here would fight with that.
     if ($script:trackedProcess -and -not $script:trackedReportsOnly) { return }
 
-    # "Ready" means the Basic set works. A Full item that was never asked for is
-    # not a fault and must not drag the verdict down, or a perfectly good Basic
-    # install reports itself broken.
+    # "Ready" means every tool answers to its own name and Python can read a
+    # document. There is one install, so anything missing is genuinely missing.
     $allReady = $true
     foreach ($tool in $config.tools) {
-        $optional = $tool.tier -eq 'optional'
         $installed = Test-ToolInstalled $tool
 
         if (-not (Test-PersistentTool $tool)) {
@@ -571,14 +570,9 @@ function Update-Status {
             continue
         }
 
-        if ($optional -and -not $installed) {
-            Set-ProgressState $tool.name 'not-asked-for'
-            continue
-        }
-
         $ready = Test-ToolReady (Get-ToolCommandName $tool)
         Set-ProgressState $tool.name $(if ($ready) { 'ready' } else { 'needs-setup' })
-        if (-not $ready -and -not $optional) { $allReady = $false }
+        if (-not $ready) { $allReady = $false }
     }
 
     $pythonReady = Test-ToolReady 'python'
@@ -747,10 +741,7 @@ $timer.Start()
 $btnInstall.Add_Click({
     # The only copy guaranteed to exist before a first install is this one.
     $scriptPath = Join-Path $PSScriptRoot 'install.ps1'
-    $setupArgs = @('-Unattended')
-    if ($chkExtras.Checked) { $setupArgs += '-IncludeOptional' }
-    $label = if ($chkExtras.Checked) { 'Setting things up, with the extras' } else { 'Setting things up' }
-    Start-Tracked $scriptPath $setupArgs (Join-Path $PSScriptRoot 'install.status.log') $label
+    Start-Tracked $scriptPath @('-Unattended') (Join-Path $PSScriptRoot 'install.status.log') 'Setting things up'
 })
 
 $btnUninstall.Add_Click({

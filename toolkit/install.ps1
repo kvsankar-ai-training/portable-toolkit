@@ -17,12 +17,7 @@ param(
     # Skips the "Add them? [Y/n]" prompt and proceeds as if Enter was pressed,
     # so this can be run from something other than an interactive console, such
     # as gui.ps1. Everything else behaves exactly the same.
-    [switch] $Unattended,
-
-    # Also installs everything tools.json marks as optional: the extra tools and
-    # the document libraries. Without it the install is the smaller set that is
-    # enough to have a working Python, Node and Git.
-    [switch] $IncludeOptional
+    [switch] $Unattended
 )
 
 $ErrorActionPreference = 'Stop'
@@ -494,6 +489,13 @@ function Install-MachinePythonPackages($packages) {
     if ($pem) { $arguments += @('--cert', $pem) }
     $arguments += $packages
 
+    # What that Python already had, so a later removal takes out only what
+    # this added. Several of these packages are common enough to be there
+    # already, and uninstalling someone's existing pandas would be worse than
+    # useless.
+    $listing = "import importlib.metadata as m; print('|'.join(sorted(set(d.metadata['Name'] for d in m.distributions() if d.metadata['Name']))))"
+    $before = @((& $machinePython -c $listing 2>$null) -split '\|' | Where-Object { $_ })
+
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     & $machinePython @arguments 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray; Write-LogLine $_ }
@@ -509,9 +511,17 @@ function Install-MachinePythonPackages($packages) {
         return
     }
 
+    $after = @((& $machinePython -c $listing 2>$null) -split '\|' | Where-Object { $_ })
+    $added = @($after | Where-Object { $before -notcontains $_ })
+    if ($added.Count) {
+        Write-Host "  added to it: $($added -join ', ')" -ForegroundColor DarkGray
+        Write-LogLine "Added to the machine Python: $($added -join ', ')"
+    }
+
     $record = [PSCustomObject]@{
         python    = $machinePython
         packages  = $packages
+        added     = $added
         installed = (Get-Date).ToString('s')
     }
     $record | ConvertTo-Json | Set-Content -Path (Get-MachinePythonMarker $InstallRoot) -Encoding utf8
@@ -555,14 +565,7 @@ Show-MachineWideTools
 
 try {
 
-$optional = @($config.tools | Where-Object { $_.tier -eq 'optional' })
-if ($optional.Count -and -not $IncludeOptional) {
-    Write-Host "Skipping the optional extras: $(($optional | ForEach-Object { $_.name }) -join ', '), and the document libraries." -ForegroundColor DarkGray
-    Write-Host "Run SETUP.cmd again with the extras, or install.ps1 -IncludeOptional, to add them.`n" -ForegroundColor DarkGray
-}
-
 foreach ($tool in $config.tools) {
-    if ($tool.tier -eq 'optional' -and -not $IncludeOptional) { continue }
     Write-Host "$($tool.name) $($tool.version)"
     if (Test-Tool $tool) {
         Write-Host "  already installed" -ForegroundColor DarkGray
@@ -684,7 +687,6 @@ Write-Host "  one shared environment at $envDir" -ForegroundColor Green
 Write-Status 'python' 'installed'
 
 $packages = @($config.python.packages)
-if ($IncludeOptional) { $packages += @($config.python.optional_packages) }
 if ($packages.Count -gt 0) {
     Write-Host "`nPython packages"
     Write-Host "  this is the longest step - several hundred MB for the document libraries"
@@ -695,8 +697,8 @@ if ($packages.Count -gt 0) {
     Write-Status 'packages' 'installed'
     Install-MachinePythonPackages $packages
 } else {
-    Write-Status 'packages' 'skipped' 'run again with the extras to add them'
-    Write-Status 'machine-python' 'skipped' 'run again with the extras to add them'
+    Write-Status 'packages' 'skipped' 'tools.json lists none'
+    Write-Status 'machine-python' 'skipped' 'tools.json lists no packages'
 }
 
 

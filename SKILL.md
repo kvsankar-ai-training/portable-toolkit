@@ -73,9 +73,9 @@ so a fresh install gets it too.
 
 ## Documents
 
-The document libraries are optional and are not installed by `SETUP.cmd`. Check
-first with `check.ps1`, which reports how many are present. To add them, run `SETUP.cmd extras`,
-or open `GUI.cmd`, tick **Also install the extras**, and press Install / Fix.
+`SETUP.cmd` installs the document libraries. `check.ps1` reports how many are
+present, and whether the Python that answers to `python` on this machine can
+import them - which is not always the toolkit's own.
 
 Reading any of docx, pdf, xlsx, pptx, html or csv is one call:
 

@@ -21,15 +21,15 @@ WHAT TO DO
 3. Press Install / Fix, and wait. The log on the right shows what is
    happening; the longest step is the Python download.
 
-That installs the tools. To add the document libraries, ripgrep and jq as
-well, tick "Also install the extras" before pressing Install / Fix. You can
-come back and tick it later; nothing has to be undone first.
+That is the whole install: the tools, Python, and the libraries that read
+Word, PDF, Excel and PowerPoint. There is nothing to choose.
 
-It downloads about 130 MB, uses about 320 MB once installed, and takes a few
-minutes - roughly double that with the extras.
+It downloads roughly 450 MB, uses about 700 MB once installed, and takes
+several minutes. Most of that is the document libraries. Do it before you
+need it rather than in front of a room.
 
 If you would rather not use the window, SETUP.cmd does the same thing from a
-command prompt, and "SETUP.cmd extras" includes the extras.
+command prompt.
 
 
 WHERE IT INSTALLS
@@ -152,11 +152,10 @@ not part of the public repo; get it from whoever runs your training or set up
 your network, separately from this download.
 
 
-OPTIONAL EXTRAS
----------------
+WHAT ELSE IS INSTALLED
+----------------------
 
-SETUP.cmd installs what you need to have a working Python, Node and Git. The
-extras are everything beyond that:
+Beyond Python, Node and Git:
 
   ripgrep    fast search across a folder of files
   jq         command-line tool for JSON
@@ -170,10 +169,6 @@ extras are everything beyond that:
              pypdf        splitting, merging and rearranging PDFs
              Pillow       images
 
-Install them at any time: GUI.cmd, tick the extras box, then Install / Fix.
-Or:
-
-    SETUP.cmd extras
 
 Reading a document is one call. The assistant will write the script; this is
 what it looks like:

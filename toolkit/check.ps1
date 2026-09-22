@@ -21,9 +21,6 @@ foreach ($tool in $config.tools) {
     $expected[$tool.name] = $exe
     if (Test-Path $exe) {
         Write-Host ("{0,-9} {1}" -f $tool.name, (& $exe $tool.verify[1] 2>&1 | Select-Object -First 1)) -ForegroundColor Green
-    } elseif ($tool.tier -eq 'optional') {
-        # Absent by default, so this is information rather than a fault.
-        Write-Host ("{0,-9} not installed (optional)" -f $tool.name) -ForegroundColor DarkGray
     } else {
         Write-Host ("{0,-9} not installed" -f $tool.name) -ForegroundColor Red
         $missing++
@@ -39,12 +36,12 @@ if (Test-Path $python) {
     $missing++
 }
 
-# The document libraries, which are the reason most people install the extras.
+# The document libraries, which are the reason the toolkit installs a Python.
 # What you type to import them is not what you type to install them:
 # python-docx imports as docx, Pillow as PIL.
 $importNames = 'markitdown', 'docx', 'pptx', 'openpyxl', 'pandas', 'pdfplumber', 'pypdf', 'PIL'
-$optionalPackages = @($config.python.optional_packages)
-if ($optionalPackages.Count -and (Test-Path $python)) {
+$wantedPackages = @($config.python.packages)
+if ($wantedPackages.Count -and (Test-Path $python)) {
     $probe = $importNames
     $found = & $python -c "
 import importlib.util, sys
@@ -55,7 +52,7 @@ print(','.join(n for n in names if importlib.util.find_spec(n) is not None))
     if ($have.Count -eq $probe.Count) {
         Write-Host ("{0,-9} all {1} document libraries present" -f 'packages', $probe.Count) -ForegroundColor Green
     } elseif ($have.Count -eq 0) {
-        Write-Host ("{0,-9} document libraries not installed (optional)" -f 'packages') -ForegroundColor DarkGray
+        Write-Host ("{0,-9} document libraries not installed" -f 'packages') -ForegroundColor DarkGray
     } else {
         Write-Host ("{0,-9} {1} of {2} document libraries: missing {3}" -f 'packages', $have.Count, $probe.Count,
             (($probe | Where-Object { $have -notcontains $_ }) -join ', ')) -ForegroundColor Yellow
@@ -77,11 +74,11 @@ $machinePaths = ([Environment]::GetEnvironmentVariable('Path', 'Machine') -split
 Write-Host "`nFound by name, as an assistant would call them:"
 $wrong = 0
 # Built from tools.json rather than hard-coded, so an added tool is checked
-# too. Three things it has to get right: the name to type is the executable's,
-# not the manifest's (ripgrep installs rg.exe); a tool marked persistent_path
-# false is deliberately kept off the permanent PATH, so asking for it by name
-# would always fail; and an optional tool that was never installed is not a
-# fault. python, pip and npm come with the environments rather than tools.json.
+# too. Two things it has to get right: the name to type is the executable's,
+# not the manifest's (ripgrep installs rg.exe); and a tool marked
+# persistent_path false is deliberately kept off the permanent PATH, so asking
+# for it by name would always fail. python, pip and npm come with the
+# environments rather than tools.json.
 $names = @()
 foreach ($tool in $config.tools) {
     if (-not (Test-PersistentTool $tool)) { continue }
@@ -133,11 +130,11 @@ print(','.join(n for n in names if importlib.util.find_spec(n) is not None))
             Write-Host ("  it can import {0} of {1}: missing {2}" -f $theyHave.Count, $importNames.Count,
                         (($importNames | Where-Object { $theyHave -notcontains $_ }) -join ', ')) -ForegroundColor Yellow
         } else {
-            Write-Host "  but it cannot import any of them. Run SETUP.cmd with the extras again." -ForegroundColor Yellow
+            Write-Host "  but it cannot import any of them. Run SETUP.cmd again." -ForegroundColor Yellow
         }
     } else {
         Write-Host "  the document libraries have NOT been added to it." -ForegroundColor Yellow
-        Write-Host "  A bare 'python' will not read documents. Run SETUP.cmd with the extras." -ForegroundColor Yellow
+        Write-Host "  A bare 'python' will not read documents. Run SETUP.cmd again." -ForegroundColor Yellow
     }
 }
 

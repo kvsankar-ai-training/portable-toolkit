@@ -420,8 +420,9 @@ toolkit's own Python is untouched and still complete.
 `check.ps1` reports which of the libraries that Python can actually import, so
 "it was installed" and "it works" are separate questions with separate answers.
 
-If you would rather not have the libraries in that interpreter, run setup
-without the extras and reach the toolkit's Python through `run.cmd python`.
+If you would rather not have the libraries in that interpreter, remove them
+afterwards with `uninstall.ps1 -Full`, or with `pip uninstall` naming them, and
+reach the toolkit's Python through `run.cmd python` instead.
 
 ## `python` runs the wrong Python after installing
 

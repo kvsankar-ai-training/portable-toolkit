@@ -76,11 +76,18 @@ if ($Full -and (Test-Path $marker)) {
         Write-Status 'machine-python' 'removing'
         $previous = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        # Names only: pip uninstall does not take the extras syntax the install
-        # used, so "markitdown[all]" has to become "markitdown".
-        $names = @($record.packages | ForEach-Object { ($_ -split '\[')[0] })
-        & $record.python -m pip uninstall -y --disable-pip-version-check @names *>&1 |
-            ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+        # Exactly what the install added, which is not the same as what it was
+        # asked to install: several of these are common enough to have been
+        # there already, and removing someone's existing pandas would be worse
+        # than leaving it. Older markers have no such list, so fall back to the
+        # requested names with the extras syntax stripped off.
+        if ($record.PSObject.Properties.Name -contains 'added') {
+            $names = @($record.added)
+        } else {
+            $names = @($record.packages | ForEach-Object { ($_ -split '\[')[0] })
+        }
+        if ($names.Count) { & $record.python -m pip uninstall -y --disable-pip-version-check @names *>&1 |
+            ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray } }
         $ErrorActionPreference = $previous
         Write-Status 'machine-python' 'removed'
     }

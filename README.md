@@ -21,23 +21,23 @@ If it fails, it is nearly always the network. The window checks that by itself
 when setup stops, and writes the result into the log - press **Copy** above the
 log and send it. There is a **Network check** button there to run it any time.
 
-That installs the tools. To add the document libraries, ripgrep and jq as well,
-tick **Also install the extras** before pressing Install / Fix. You can come
-back and tick it later; nothing has to be undone first.
+That is the whole install: the tools, Python, and the libraries that read Word,
+PDF, Excel and PowerPoint. There is nothing to choose and nothing to come back
+for.
 
-It downloads about 130 MB and uses about 320 MB once installed, or roughly
-double that with the extras.
+It downloads roughly 450 MB and uses about 700 MB once installed. Most of that
+is the document libraries, and most of the time is the Python packages. Do it
+before you need it rather than in front of a room.
 
 ### Without a window
 
 If you would rather not use the window, or you are scripting it:
 
 ```
-SETUP.cmd            the tools
-SETUP.cmd extras     the tools and the extras
+SETUP.cmd
 ```
 
-Both do exactly what the buttons do.
+It does exactly what the button does.
 
 ### If your machine already has a Python
 

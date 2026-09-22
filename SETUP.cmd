@@ -1,17 +1,11 @@
 @echo off
 setlocal
 
-rem Installs the tools. Add the word "full" to also install the extras:
-rem the document libraries, ripgrep and jq.
+rem Installs everything: the tools, Python, and the libraries that read
+rem documents. There is nothing to choose - GUI.cmd does the same with a button.
 rem
-rem   SETUP.cmd          tools only
-rem   SETUP.cmd extras   tools and extras
-rem
-rem GUI.cmd offers the same choice with buttons.
-
-set EXTRAS=
-if /I "%~1"=="full" set EXTRAS=-IncludeOptional
-if /I "%~1"=="extras" set EXTRAS=-IncludeOptional
+rem Earlier versions took the word "extras" for a second, larger install. It is
+rem accepted and ignored, so older instructions still work.
 
 echo.
 echo Windows marks files that came from the internet, and a marked script will
@@ -24,7 +18,7 @@ powershell.exe -NoProfile -Command "Get-ChildItem -LiteralPath '%~dp0.' -Recurse
 
 rem Batch files are not affected by execution policy either. The switch below
 rem applies to this one process and changes no machine setting.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0toolkit\install.ps1" %EXTRAS%
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0toolkit\install.ps1"
 if errorlevel 1 goto failed
 goto done
 
