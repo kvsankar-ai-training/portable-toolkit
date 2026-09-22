@@ -392,6 +392,37 @@ installed, but the machine will not run programs from a user-writable folder.
 This cannot be worked around from inside the toolkit. Record the exact message
 and which executable was blocked.
 
+## A Python installed for all users wins, and setup adds the libraries to it
+
+`check.ps1` says something like:
+
+```
+python C:\Program Files\Python312\python.exe
+       ^ installed machine-wide; user PATH cannot override it
+```
+
+Windows builds PATH as machine entries first and user entries after. A Python
+installed for all users therefore answers to `python` in every window, and
+nothing setup writes to your own PATH can change that. Only an administrator
+can.
+
+That matters because an assistant types `python`, not a full path. If the
+document libraries are only in the toolkit's Python, every `import markitdown`
+in that other interpreter fails, and the assistant concludes the machine cannot
+read documents.
+
+So when setup finds such a Python, it installs the same document libraries into
+it as well, with `pip install --user`. Those land under your own profile in
+`%APPDATA%\Python\...\site-packages`: no administrator rights, nothing outside
+your account changes, and `uninstall.ps1 -Full` takes them out again. The
+toolkit's own Python is untouched and still complete.
+
+`check.ps1` reports which of the libraries that Python can actually import, so
+"it was installed" and "it works" are separate questions with separate answers.
+
+If you would rather not have the libraries in that interpreter, run setup
+without the extras and reach the toolkit's Python through `run.cmd python`.
+
 ## `python` runs the wrong Python after installing
 
 Two causes, and `check.ps1` tells them apart. Start there:

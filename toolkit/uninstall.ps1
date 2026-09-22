@@ -65,6 +65,31 @@ if (-not (Test-Path $px)) {
     Write-Status 'px' 'left-running'
 }
 
+# Packages this toolkit added to a Python it does not own. They sit under the
+# user's profile, and leaving them behind would be leaving a change outside the
+# install root - which is the one thing uninstall exists to undo.
+$marker = Get-MachinePythonMarker $Root
+if ($Full -and (Test-Path $marker)) {
+    $record = Get-Content $marker -Raw | ConvertFrom-Json
+    if (Test-Path $record.python) {
+        Write-Host "`nRemoving the libraries added to $($record.python)..."
+        Write-Status 'machine-python' 'removing'
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        # Names only: pip uninstall does not take the extras syntax the install
+        # used, so "markitdown[all]" has to become "markitdown".
+        $names = @($record.packages | ForEach-Object { ($_ -split '\[')[0] })
+        & $record.python -m pip uninstall -y --disable-pip-version-check @names *>&1 |
+            ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+        $ErrorActionPreference = $previous
+        Write-Status 'machine-python' 'removed'
+    }
+    Remove-Item $marker -Force -ErrorAction SilentlyContinue
+} elseif (Test-Path $marker) {
+    Write-Host "`nLeft the libraries added to the machine-wide Python. -Full removes those too."
+    Write-Status 'machine-python' 'kept'
+}
+
 if ($Full) {
     Write-Host "`nDeleting the installed tools..."
     $targets = @($config.tools | ForEach-Object { $_.target }) +

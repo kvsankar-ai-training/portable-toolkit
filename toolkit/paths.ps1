@@ -34,6 +34,31 @@ function Get-KnownToolkitPaths($Root, $config) {
     $paths | Select-Object -Unique
 }
 
+function Get-MachineWidePython {
+    # The python.exe that answers to a bare "python" in a new window, when it is
+    # not the toolkit's. Windows builds PATH as machine entries first and user
+    # entries after, so a Python installed for all users always wins and no
+    # amount of user PATH editing changes that.
+    #
+    # It has to be worked out from the registry rather than with Get-Command,
+    # because the process asking has usually put the toolkit ahead on its own
+    # PATH and would answer the wrong question.
+    $machinePaths = ([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') |
+        Where-Object { $_ } |
+        ForEach-Object { [Environment]::ExpandEnvironmentVariables($_).Trim().TrimEnd('\') }
+
+    foreach ($dir in $machinePaths) {
+        if (-not $dir) { continue }
+        $candidate = Join-Path $dir 'python.exe'
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
+
+function Get-MachinePythonMarker($Root) {
+    Join-Path $Root '.machine-python-packages.json'
+}
+
 function Get-PersistentToolkitPaths($Root, $config) {
     # Same list, minus any tool marked "persistent_path": false. Those still
     # need to be reachable within run.cmd/env.ps1's own short-lived PATH (so

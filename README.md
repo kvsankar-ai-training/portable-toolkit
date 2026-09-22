@@ -39,6 +39,18 @@ SETUP.cmd extras     the tools and the extras
 
 Both do exactly what the buttons do.
 
+### If your machine already has a Python
+
+Some corporate images install Python for all users. Windows reads machine PATH
+entries before yours, so that Python answers to `python` in every window and
+nothing the toolkit writes to your own PATH can change it.
+
+Setup notices, and installs the same document libraries into that Python too,
+with `pip install --user`. They land under your profile, need no administrator,
+and `uninstall.ps1 -Full` removes them again. The toolkit's own Python is
+untouched. The Status panel has a row for it, and `check.ps1` reports which
+libraries that Python can actually import.
+
 ## What it installs
 
 | Tool | Version | Verified against |

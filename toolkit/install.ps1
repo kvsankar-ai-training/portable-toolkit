@@ -445,6 +445,80 @@ etwork-check.ps1 - it names who signed the connection."
     }
 }
 
+function Export-WindowsRootCertificates($Path) {
+    # The same TLS inspection that stops uv stops pip, and for the same reason:
+    # pip trusts the bundle inside certifi and nothing else. Hand it the
+    # authorities this machine already trusts. Nothing is weakened - these are
+    # read straight out of the Windows store.
+    $folder = Split-Path -Parent $Path
+    if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
+
+    $lines = @()
+    foreach ($store in 'Cert:\LocalMachine\Root', 'Cert:\CurrentUser\Root') {
+        foreach ($certificate in (Get-ChildItem $store -ErrorAction SilentlyContinue)) {
+            $lines += '-----BEGIN CERTIFICATE-----'
+            $lines += [Convert]::ToBase64String($certificate.RawData, 'InsertLineBreaks')
+            $lines += '-----END CERTIFICATE-----'
+        }
+    }
+    if (-not $lines) { return $null }
+    Set-Content -Path $Path -Value $lines -Encoding ascii
+    return $Path
+}
+
+function Install-MachinePythonPackages($packages) {
+    # A Python installed for all users answers to "python" whatever this install
+    # does, because Windows reads the machine PATH first. An assistant types
+    # "python", so on those machines the document libraries have to be where
+    # that Python looks, or every one of them fails to import.
+    #
+    # --user puts them under this account's profile: no administrator rights, no
+    # change to anything outside the profile, and pip uninstall reverses it. The
+    # toolkit's own environment is untouched and still complete.
+    $machinePython = Get-MachineWidePython
+    if (-not $machinePython) {
+        Write-Status 'machine-python' 'not-needed'
+        return
+    }
+
+    Write-Host "`nA Python installed for all users answers to 'python' here:" -ForegroundColor Yellow
+    Write-Host "  $machinePython" -ForegroundColor Yellow
+    Write-Host "  Windows reads the machine PATH before yours, so that one wins by name."
+    Write-Host "  Adding the same document libraries to it, under your profile only."
+    Write-LogLine "A machine-wide Python wins by name here: $machinePython"
+    Write-LogLine "Adding the document libraries to it with pip --user, so a bare 'python' can read documents."
+    Write-Status 'machine-python' 'installing' 'adding the libraries to the machine Python'
+
+    $pem = Export-WindowsRootCertificates (Join-Path $InstallRoot 'certs\windows-roots.pem')
+    $arguments = @('-m', 'pip', 'install', '--user', '--disable-pip-version-check', '--no-warn-script-location')
+    if ($pem) { $arguments += @('--cert', $pem) }
+    $arguments += $packages
+
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $machinePython @arguments 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray; Write-LogLine $_ }
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $previous
+
+    if ($code -ne 0) {
+        # Not fatal. The toolkit's own Python is installed and complete; what
+        # failed is an addition to someone else's interpreter.
+        Write-Host "  that did not work (exit code $code). The toolkit's own Python is unaffected." -ForegroundColor Yellow
+        Write-LogLine "Adding the libraries to the machine Python failed with exit code $code. Use run.cmd python instead."
+        Write-Status 'machine-python' 'error' "pip exited $code - use run.cmd python instead"
+        return
+    }
+
+    $record = [PSCustomObject]@{
+        python    = $machinePython
+        packages  = $packages
+        installed = (Get-Date).ToString('s')
+    }
+    $record | ConvertTo-Json | Set-Content -Path (Get-MachinePythonMarker $InstallRoot) -Encoding utf8
+    Write-Host "  done - a bare 'python' can now read documents too" -ForegroundColor Green
+    Write-Status 'machine-python' 'installed'
+}
+
 function Show-MachineWideTools {
     # Windows reads the system PATH before the user PATH, and setup can only
     # write the user half. Anything already installed for all users will keep
@@ -619,8 +693,10 @@ if ($packages.Count -gt 0) {
     Write-LogLine "This is the longest step. Several hundred MB, and uv reports below as it goes."
     Invoke-Uv pip install @packages
     Write-Status 'packages' 'installed'
+    Install-MachinePythonPackages $packages
 } else {
     Write-Status 'packages' 'skipped' 'run again with the extras to add them'
+    Write-Status 'machine-python' 'skipped' 'run again with the extras to add them'
 }
 
 

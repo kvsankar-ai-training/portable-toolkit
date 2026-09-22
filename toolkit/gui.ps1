@@ -14,6 +14,9 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $config = Get-Content (Join-Path $PSScriptRoot 'tools.json') -Raw | ConvertFrom-Json
+# Get-MachineWidePython and Get-MachinePythonMarker live here, so this window
+# and the installer decide the same way what a bare "python" reaches.
+. (Join-Path $PSScriptRoot 'paths.ps1')
 
 function Resolve-InstallRoot {
     # Where install.ps1 actually put things, which is not necessarily wherever
@@ -279,7 +282,7 @@ $grpSetup.Controls.Add($btnRemoveAll)
 # tools.json, so adding a tool there is still the only edit needed - which side
 # it lands on follows its tier.
 $basicNames = @($config.tools | Where-Object { $_.tier -ne 'optional' } | ForEach-Object { $_.name }) + @('python')
-$fullNames  = @($config.tools | Where-Object { $_.tier -eq 'optional' } | ForEach-Object { $_.name }) + @('packages')
+$fullNames  = @($config.tools | Where-Object { $_.tier -eq 'optional' } | ForEach-Object { $_.name }) + @('packages', 'machine-python')
 $script:statusLabels = @{}
 
 $rows = [Math]::Max($basicNames.Count, $fullNames.Count)
@@ -510,6 +513,7 @@ function Set-ProgressState {
         'updated'           { 'Done' }
         'skipped'           { 'Skipped' }
         'not-asked-for'     { 'Not installed - tick the extras box to add' }
+        'not-needed'        { 'Not needed - python here is the toolkit''s' }
         'kept'              { 'Already installed, left as it is' }
         'left-running'      { 'Left running - needed to reinstall' }
         'done'              { 'Done' }
@@ -520,7 +524,7 @@ function Set-ProgressState {
     $color = switch -Regex ($State) {
         'error'                                                      { [System.Drawing.Color]::Red; break }
         'ready|installed|already-installed|updated|done'             { [System.Drawing.Color]::DarkGreen; break }
-        'not-asked-for'                                              { [System.Drawing.Color]::Gray; break }
+        'not-asked-for|not-needed'                                   { [System.Drawing.Color]::Gray; break }
         'not installed|needs-setup'                                  { [System.Drawing.Color]::DarkOrange; break }
         'pending'                                                    { [System.Drawing.Color]::Gray; break }
         default                                                      { [System.Drawing.Color]::SteelBlue }
@@ -587,6 +591,21 @@ function Update-Status {
     $marker = Join-Path $script:Root ($config.python.environment + '\Lib\site-packages\markitdown')
     Set-ProgressState 'packages' $(if (Test-Path $marker) { 'installed' } else { 'not-asked-for' })
 
+    # A Python installed for all users answers to "python" whatever is on the
+    # user PATH, so the libraries have to be in that one too or an assistant
+    # typing "python" finds none of them. Nothing to do where there is no such
+    # Python, which is the common case off a corporate image.
+    $machinePython = Get-MachineWidePython
+    if (-not $machinePython) {
+        Set-ProgressState 'machine-python' 'not-needed'
+    } elseif (Test-Path (Get-MachinePythonMarker $script:Root)) {
+        Set-ProgressState 'machine-python' 'installed'
+    } elseif (Test-Path $marker) {
+        Set-ProgressState 'machine-python' 'needs-setup'
+    } else {
+        Set-ProgressState 'machine-python' 'not-asked-for'
+    }
+
     if ($allReady) {
         $lblStatus.Text = "Ready to use"
         $lblStatus.ForeColor = [System.Drawing.Color]::DarkGreen
@@ -599,6 +618,7 @@ function Update-Status {
 # ---- long-running actions (install / uninstall) --------------------------
 
 $script:trackedProcess = $null
+$script:trackedScript = $null
 $script:trackedReportsOnly = $false
 $script:activeStatusLog = $null
 $script:statusLogOffset = 0
@@ -624,6 +644,7 @@ function Start-Tracked {
     # -Reports is for a run that only looks at things. It changes nothing, so
     # the status rows keep saying what is installed instead of going blank.
     param($scriptPath, $extraArgs, $statusLogPath, $label, [switch] $Reports)
+    $script:trackedScript = $scriptPath
     $btnInstall.Enabled = $false
     $btnUninstall.Enabled = $false
     $btnRemoveAll.Enabled = $false
@@ -689,9 +710,24 @@ function Invoke-Tick {
         $btnRemoveAll.Enabled = $true
         $btnNetCheck.Enabled = $true
 
-        # Nearly everything that fails here fails at the network, and the answer
-        # is in this report. Running it unasked means the log already holds what
-        # is needed to say why - one Copy, no second round trip.
+        # A script that is no longer on disk was taken off it while it ran. That
+        # is security software, not a fault in the toolkit, and no amount of
+        # network checking will say so. Seen on a machine running Bitdefender:
+        # the run stops part way with no error line, and install.ps1 is gone.
+        if ($code -ne 0 -and -not $wasReport -and $script:trackedScript -and
+            -not (Test-Path $script:trackedScript)) {
+            Write-Log ""
+            Write-Log "$(Split-Path -Leaf $script:trackedScript) is no longer on disk. It was removed while it ran."
+            Write-Log "That is antivirus quarantining it, not a fault here and not a network problem."
+            Write-Log "It needs an exclusion for this folder from whoever manages endpoint security."
+            Write-Log "See 'Antivirus quarantined the toolkit' in toolkit\troubleshooting.md."
+            Update-Status
+            return
+        }
+
+        # Nearly everything else that fails here fails at the network, and the
+        # answer is in this report. Running it unasked means the log already
+        # holds what is needed to say why - one Copy, no second round trip.
         if ($code -ne 0 -and -not $wasReport) {
             Write-Log ""
             Write-Log "That did not finish. Checking the network so the log says why:"

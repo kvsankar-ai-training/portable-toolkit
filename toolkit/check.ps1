@@ -40,9 +40,12 @@ if (Test-Path $python) {
 }
 
 # The document libraries, which are the reason most people install the extras.
+# What you type to import them is not what you type to install them:
+# python-docx imports as docx, Pillow as PIL.
+$importNames = 'markitdown', 'docx', 'pptx', 'openpyxl', 'pandas', 'pdfplumber', 'pypdf', 'PIL'
 $optionalPackages = @($config.python.optional_packages)
 if ($optionalPackages.Count -and (Test-Path $python)) {
-    $probe = 'markitdown', 'docx', 'pptx', 'openpyxl', 'pandas', 'pdfplumber', 'pypdf', 'PIL'
+    $probe = $importNames
     $found = & $python -c "
 import importlib.util, sys
 names = sys.argv[1:]
@@ -103,6 +106,38 @@ foreach ($name in $names) {
             Write-Host ("  {0,-6} ^ not the toolkit's copy" -f '') -ForegroundColor Yellow
         }
         $wrong++
+    }
+}
+
+# A Python installed for all users wins by name and cannot be displaced from a
+# user account, so setup adds the document libraries to it as well. Whether that
+# happened decides if a bare "python" can read a document on this machine.
+$machinePython = Get-MachineWidePython
+if ($machinePython) {
+    Write-Host "`nA Python installed for all users answers to 'python' here:"
+    Write-Host "  $machinePython"
+    if (Test-Path (Get-MachinePythonMarker $Root)) {
+        $record = Get-Content (Get-MachinePythonMarker $Root) -Raw | ConvertFrom-Json
+        Write-Host ("  document libraries were added to it on " + $record.installed) -ForegroundColor Green
+        # Ask the same question of that Python as of the toolkit's own, rather
+        # than trusting the marker: packages can be removed after the fact.
+        $theirs = & $machinePython -c "
+import importlib.util, sys
+names = sys.argv[1:]
+print(','.join(n for n in names if importlib.util.find_spec(n) is not None))
+" @importNames 2>$null
+        $theyHave = @($theirs -split ',' | Where-Object { $_ })
+        if ($theyHave.Count -eq $importNames.Count) {
+            Write-Host "  and it can import all of them, so a bare 'python' can read documents" -ForegroundColor Green
+        } elseif ($theyHave.Count -gt 0) {
+            Write-Host ("  it can import {0} of {1}: missing {2}" -f $theyHave.Count, $importNames.Count,
+                        (($importNames | Where-Object { $theyHave -notcontains $_ }) -join ', ')) -ForegroundColor Yellow
+        } else {
+            Write-Host "  but it cannot import any of them. Run SETUP.cmd with the extras again." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  the document libraries have NOT been added to it." -ForegroundColor Yellow
+        Write-Host "  A bare 'python' will not read documents. Run SETUP.cmd with the extras." -ForegroundColor Yellow
     }
 }
 
