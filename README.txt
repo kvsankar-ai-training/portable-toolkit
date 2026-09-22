@@ -159,6 +159,8 @@ Beyond Python, Node and Git:
 
   ripgrep    fast search across a folder of files
   jq         command-line tool for JSON
+  gh         GitHub CLI. Among other things "gh skills install" fetches
+             agent skills published on GitHub, which needs 2.90 or newer
   Python libraries for documents:
              markitdown   reads Word, PDF, Excel, PowerPoint, HTML and CSV
              python-docx  writes Word files

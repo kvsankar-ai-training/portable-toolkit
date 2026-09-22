@@ -58,6 +58,7 @@ libraries that Python can actually import.
 | uv | 0.12.17 | the `.sha256` published beside the release asset |
 | Node | 24.21.0 | `SHASUMS256.txt` on nodejs.org |
 | Git (MinGit) | 2.55.0.5 | the SHA-256 table in the Git for Windows release notes |
+| GitHub CLI | 2.101.0 | `checksums.txt` published with the release |
 | Python | 3.13 | fetched by uv |
 | Px | 0.11.0 | the `.sha256` published beside the release asset |
 
