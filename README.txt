@@ -185,7 +185,11 @@ what it looks like:
 IF SOMETHING GOES WRONG
 -----------------------
 
-If it is a network or proxy problem, run this first and send the output:
+If it is a network or proxy problem, the window already has the answer: it
+runs a network check by itself whenever setup fails, and there is a Network
+check button above the log to run it any time. Press Copy and send the log.
+
+The same check from a console:
 
     C:\tools\toolkit\network-check.ps1
 

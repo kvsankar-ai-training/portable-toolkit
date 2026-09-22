@@ -278,20 +278,73 @@ function Restart-Stopped($tool, $wasRunning) {
     }
 }
 
+function Get-HttpStatus($ErrorRecord) {
+    # What the other end answered, if it answered at all. Normally the response
+    # object carries it; when it does not, the message still spells it out, as
+    # in "The remote server returned an error: (502) Bad Gateway."
+    try {
+        $code = [int] $ErrorRecord.Exception.Response.StatusCode
+        if ($code) { return $code }
+    } catch { }
+    if ("$($ErrorRecord.Exception.Message)" -match '\((?<code>[1-5]\d\d)\)') { return [int] $Matches.code }
+    return $null
+}
+
 function Install-Tool($tool) {
     Write-Status $tool.name 'downloading'
     $zip = Join-Path $env:TEMP "portable-toolkit-$($tool.name).zip"
     Write-Host "  downloading $($tool.url)"
+    $download = Get-DownloadArgs $tool.url $zip
+    $hadProxy = $download.ContainsKey('Proxy')
+    $via = if ($hadProxy) { $download.Proxy } else { 'no proxy - straight out' }
+    Write-Host "  via $via"
+
     try {
-        $download = Get-DownloadArgs $tool.url $zip
         Invoke-WebRequest @download
     } catch {
-        if ("$($_.Exception.Message)" -match '407|Proxy Authentication') {
-            throw ("Proxy authentication failed (407) downloading $($tool.name). Your proxy wants credentials " +
-                   "this script cannot supply. If px is installed and configured, start it first and set " +
-                   "HTTPS_PROXY to http://127.0.0.1:3128, then run setup again. See toolkit\troubleshooting.md.")
+        $status = Get-HttpStatus $_
+        $detail = (($_.Exception.Message -split "`n")[0]).Trim().TrimEnd('.')
+
+        # A 5xx comes from the proxy, not from the site: it took the request and
+        # could not complete it. Whatever the reason - the site blocked by
+        # policy, the proxy unable to reach it, or the proxy simply wrong for
+        # this address - going straight out is worth one attempt before giving
+        # up, and costs a second when it fails too.
+        $recovered = $false
+        if ($status -ge 500 -and $hadProxy) {
+            Write-Host "  $via returned $status; trying without it" -ForegroundColor Yellow
+            Write-LogLine "$via returned $status for $($tool.name); retrying without a proxy."
+            try {
+                Invoke-WebRequest -Uri $tool.url -OutFile $zip -UseBasicParsing
+                Write-Host "  that worked - the proxy was the problem, not the network" -ForegroundColor Green
+                Write-LogLine "Downloading without the proxy worked."
+                $recovered = $true
+            } catch {
+                $status = Get-HttpStatus $_
+                $detail = (($_.Exception.Message -split "`n")[0]).Trim().TrimEnd('.')
+            }
         }
-        throw
+
+        if (-not $recovered) {
+            # Say who refused, and only blame a proxy when one was actually used.
+            $refuser = if ($hadProxy) { "The proxy" } else { "That address" }
+            $advice =
+                if ($status -eq 407) {
+                    "A proxy is asking for credentials this script cannot supply. Px exists for that: set it up in the GUI, or with run.cmd px --save --proxy=host:port, then run setup again."
+                } elseif ($status -eq 403) {
+                    "$refuser refused the request. That is usually policy rather than a fault, and a question for whoever runs the network."
+                } elseif ($status -ge 500 -and $hadProxy) {
+                    "The proxy took the request and could not complete it, and going straight out failed too. That points at the proxy or at what it is allowed to reach, not at this script."
+                } elseif ($status -ge 500) {
+                    "The site itself answered with a server error, which is usually temporary. Try again in a few minutes."
+                } elseif (-not $status) {
+                    "Nothing answered at all, so this never got as far as an HTTP reply."
+                } else { "" }
+
+            throw ("$($tool.name): could not download $($tool.url)" +
+                   $(if ($status) { " - HTTP $status" } else { " - $detail" }) +
+                   ". Tried via $via. $advice Run toolkit\network-check.ps1 and send its output.")
+        }
     }
 
     # Refuse to install anything whose contents do not match the published hash.

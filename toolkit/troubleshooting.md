@@ -48,6 +48,38 @@ $env:HTTPS_PROXY = 'http://your-proxy:8080'
 A certificate error usually means the proxy is inspecting traffic and
 re-signing it. Do not disable certificate validation. Report it.
 
+## The first download fails with "(502) Bad Gateway"
+
+The log says something like:
+
+```
+uv: downloading
+overall: error - The remote server returned an error: (502) Bad Gateway.
+```
+
+Nothing is wrong with uv. That is the very first download, and a 502 comes from
+a proxy that accepted the request and could not complete it - so this machine
+reached a proxy, and the proxy did not reach the internet. The usual reasons
+are that the proxy is only reachable from inside the corporate network and you
+are somewhere else, that the address it was given is stale, or that the site is
+not one it is allowed to fetch.
+
+Setup names the proxy it used, and tries once without it, because a proxy that
+is in the way is not always one you have to go through. If that second attempt
+works the install carries on and says so in the log.
+
+If it does not, setup stops and the window runs the network check by itself, so
+the log already holds the answer. Press **Copy** above the log and send it.
+
+Worth trying, in this order:
+
+- Run it again on the corporate network, or with the VPN connected.
+- Read the network check's "What Windows would use for each address". If it
+  names a proxy you do not recognise, that setting is the problem rather than
+  the network.
+- If the proxy wants credentials rather than failing outright, the next section
+  is the one you want.
+
 ## The proxy answers with 407, and setting HTTPS_PROXY is not enough
 
 This is about programs you run afterwards, not about setup itself. Setup lets
@@ -202,8 +234,10 @@ addresses, whether those proxies answer, whether Windows can reach the sites
 the tools come from, whether `uv` can reach them with and without a proxy, and
 what state Px is in.
 
-Send the whole output when reporting a problem - the GUI has a Copy button
-above its log for exactly that. The useful distinction it draws
+The window has a **Network check** button above its log, and runs the same
+check by itself whenever setup fails - so after a failure the log already holds
+this. Press **Copy** next to it and send the whole thing when reporting a
+problem. The useful distinction it draws
 is between Windows reaching a site and `uv` reaching it: the tools download
 through Windows, `uv` does not, and a failure in one and not the other points
 straight at the proxy handling rather than at the network.

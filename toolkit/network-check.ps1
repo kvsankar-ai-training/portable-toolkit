@@ -9,6 +9,24 @@ downloads go through Windows, which knows this network's proxy settings and can
 run an automatic configuration script. uv reads proxy environment variables and
 nothing else. When one works and the other does not, this says which.
 #>
+param([string] $StatusLog)
+
+if ($StatusLog) {
+    # gui.ps1 runs this hidden and reads LOG| lines out of a file, so that the
+    # report lands in its log pane next to the Copy button - which is how it
+    # reaches whoever can act on it. Shadowing Write-Host sends every line
+    # below to both places without the report itself having to know.
+    function Write-Host {
+        param(
+            [Parameter(ValueFromPipeline = $true, Position = 0)] $Object,
+            [System.ConsoleColor] $ForegroundColor,
+            [switch] $NoNewline
+        )
+        Microsoft.PowerShell.Utility\Write-Host @PSBoundParameters
+        # Split rather than flatten, so the blank line before each heading survives
+        try { foreach ($part in (("$Object") -split ("`r?`n"))) { Add-Content -Path $StatusLog -Value ("LOG|" + $part) -ErrorAction Stop } } catch { }
+    }
+}
 
 $Root = Split-Path -Parent $PSScriptRoot
 $targets = @(

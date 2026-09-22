@@ -17,6 +17,10 @@ or use the green **Code** button above and choose *Download ZIP*.
 3. Press **Install / Fix**, and wait. The log on the right shows what is
    happening; the longest step is the Python download.
 
+If it fails, it is nearly always the network. The window checks that by itself
+when setup stops, and writes the result into the log - press **Copy** above the
+log and send it. There is a **Network check** button there to run it any time.
+
 That installs the tools. To add the document libraries, ripgrep and jq as well,
 tick **Also install the extras** before pressing Install / Fix. You can come
 back and tick it later; nothing has to be undone first.

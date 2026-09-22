@@ -432,6 +432,18 @@ $btnCopyLog.ForeColor = [System.Drawing.Color]::DimGray
 $btnCopyLog.TabStop = $false
 $form.Controls.Add($btnCopyLog)
 
+# Sits with Copy because its answer arrives in the box below them, and the two
+# together are the whole of "tell someone what went wrong".
+$btnNetCheck = New-Object System.Windows.Forms.Button
+$btnNetCheck.Text = "Network check"
+$btnNetCheck.Size = New-Object System.Drawing.Size(100, 22)
+$btnNetCheck.Location = New-Object System.Drawing.Point(($logLeft + $logWidth - 62 - 6 - 100), ($logTop - 24))
+$btnNetCheck.FlatStyle = 'Flat'
+$btnNetCheck.FlatAppearance.BorderColor = [System.Drawing.Color]::LightGray
+$btnNetCheck.ForeColor = [System.Drawing.Color]::DimGray
+$btnNetCheck.TabStop = $false
+$form.Controls.Add($btnNetCheck)
+
 $txtLog = New-Object System.Windows.Forms.TextBox
 $txtLog.Location = New-Object System.Drawing.Point($logLeft, $logTop)
 $txtLog.Size = New-Object System.Drawing.Size($logWidth, ($logBottom - $logTop))
@@ -449,6 +461,7 @@ $form.ClientSize = New-Object System.Drawing.Size(($logLeft + $logWidth + 12), (
 $form.MinimumSize = $form.Size
 $txtLog.Anchor = 'Top,Bottom,Left,Right'
 $btnCopyLog.Anchor = 'Top,Right'
+$btnNetCheck.Anchor = 'Top,Right'
 
 # Says "Copied" briefly, then goes back. Without that there is no sign it
 # worked, and people press it again.
@@ -537,7 +550,7 @@ function Update-Status {
 
     # While install/uninstall is actively running, Read-NewStatusLines owns
     # the progress labels; overwriting them here would fight with that.
-    if ($script:trackedProcess) { return }
+    if ($script:trackedProcess -and -not $script:trackedReportsOnly) { return }
 
     # "Ready" means the Basic set works. A Full item that was never asked for is
     # not a fault and must not drag the verdict down, or a perfectly good Basic
@@ -586,6 +599,7 @@ function Update-Status {
 # ---- long-running actions (install / uninstall) --------------------------
 
 $script:trackedProcess = $null
+$script:trackedReportsOnly = $false
 $script:activeStatusLog = $null
 $script:statusLogOffset = 0
 
@@ -606,11 +620,18 @@ function Read-NewStatusLines {
     }
 }
 
-function Start-Tracked($scriptPath, $extraArgs, $statusLogPath, $label) {
+function Start-Tracked {
+    # -Reports is for a run that only looks at things. It changes nothing, so
+    # the status rows keep saying what is installed instead of going blank.
+    param($scriptPath, $extraArgs, $statusLogPath, $label, [switch] $Reports)
     $btnInstall.Enabled = $false
     $btnUninstall.Enabled = $false
     $btnRemoveAll.Enabled = $false
-    foreach ($lbl in $script:statusLabels.Values) { $lbl.Text = 'Waiting...'; $lbl.ForeColor = [System.Drawing.Color]::Gray }
+    $btnNetCheck.Enabled = $false
+    $script:trackedReportsOnly = [bool] $Reports
+    if (-not $Reports) {
+        foreach ($lbl in $script:statusLabels.Values) { $lbl.Text = 'Waiting...'; $lbl.ForeColor = [System.Drawing.Color]::Gray }
+    }
     Remove-Item $statusLogPath -Force -ErrorAction SilentlyContinue
     $script:activeStatusLog = $statusLogPath
     $script:statusLogOffset = 0
@@ -640,21 +661,49 @@ function Sync-Environment {
     }
 }
 
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 1000
-$timer.Add_Tick({
+function Start-NetworkCheck {
+    # Reports how this machine reaches the internet. Run as a tracked process
+    # rather than inline, because it makes several network calls with their own
+    # timeouts and doing that on the UI thread would freeze the window for as
+    # long as it takes.
+    $checkScript = Join-Path $PSScriptRoot 'network-check.ps1'
+    if (-not (Test-Path $checkScript)) { Write-Log "network-check.ps1 is missing from $PSScriptRoot."; return }
+    $log = Join-Path $PSScriptRoot 'network-check.status.log'
+    Start-Tracked $checkScript @('-StatusLog', $log) $log 'Checking how this machine reaches the internet' -Reports
+}
+
+function Invoke-Tick {
+    # The timer's body as a function, so it can be exercised without a window
+    # on screen - the same reason Copy-LogToClipboard is one.
     Read-NewStatusLines
     if ($script:trackedProcess -and $script:trackedProcess.HasExited) {
         Read-NewStatusLines   # catch anything written between the last tick and exit
-        Write-Log "Finished (exit code $($script:trackedProcess.ExitCode))."
+        $code = $script:trackedProcess.ExitCode
+        $wasReport = $script:trackedReportsOnly
+        Write-Log "Finished (exit code $code)."
         $script:trackedProcess = $null
+        $script:trackedReportsOnly = $false
         $script:activeStatusLog = $null
         $btnInstall.Enabled = $true
         $btnUninstall.Enabled = $true
         $btnRemoveAll.Enabled = $true
+        $btnNetCheck.Enabled = $true
+
+        # Nearly everything that fails here fails at the network, and the answer
+        # is in this report. Running it unasked means the log already holds what
+        # is needed to say why - one Copy, no second round trip.
+        if ($code -ne 0 -and -not $wasReport) {
+            Write-Log ""
+            Write-Log "That did not finish. Checking the network so the log says why:"
+            Start-NetworkCheck
+        }
     }
     Update-Status
-})
+}
+
+$timer = New-Object System.Windows.Forms.Timer
+$timer.Interval = 1000
+$timer.Add_Tick({ Invoke-Tick })
 $timer.Start()
 
 # ---- button handlers ----------------------------------------------------
@@ -689,6 +738,8 @@ $btnRemoveAll.Add_Click({
 
     Start-Tracked $installed @('-Full') (Join-Path $script:Root 'toolkit\uninstall.status.log') 'Removing everything'
 })
+
+$btnNetCheck.Add_Click({ Start-NetworkCheck })
 
 $btnCheck.Add_Click({
     $installed = Join-Path $script:Root 'toolkit\check.ps1'

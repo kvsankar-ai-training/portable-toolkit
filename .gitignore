@@ -7,3 +7,4 @@ toolkit/site.json
 # gui.ps1 for live progress. Never meant to be committed.
 toolkit/install.status.log
 toolkit/uninstall.status.log
+toolkit/network-check.status.log
