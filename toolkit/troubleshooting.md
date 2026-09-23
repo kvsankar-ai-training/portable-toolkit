@@ -17,6 +17,15 @@ more and report the new error if the lock times out again. Do not delete the
 `.lock` file; the file's presence alone does not identify the process holding
 the lock. Increasing `UV_LOCK_TIMEOUT` only makes setup wait longer.
 
+## Px was saved for a different network
+
+Setup checks that the running Px process and its saved upstream match the
+proxy selected for this network. If the saved address is stale, setup updates
+it and restarts Px before installing Python packages. Px has one saved
+upstream at a time; if another application later needs a different proxy,
+enter that address under **Corporate proxy** in the GUI and click **Save &
+start**.
+
 ## SETUP.cmd opens and closes immediately
 
 The window closed before you could read it. Open PowerShell in the toolkit

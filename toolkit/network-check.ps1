@@ -48,7 +48,7 @@ $targets = @(
     'https://pypi.org'
 )
 
-function Show($label, $value) { Write-Host ("  {0,-26} {1}" -f $label, $value) }
+function Show($label, $value) { Write-Host ("  {0,-26} {1}" -f $label, (Protect-ProxyText $value)) }
 
 Write-Host "`nWindows proxy settings" -ForegroundColor Cyan
 $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
@@ -154,8 +154,9 @@ $listening = $false
 try { $c = New-Object System.Net.Sockets.TcpClient; $listening = $c.ConnectAsync('127.0.0.1', 3128).Wait(1500); $c.Close() } catch { }
 Show 'answering on 3128' $listening
 if (Test-Path (Join-Path $Root 'px\px.ini')) {
-    $server = (Select-String -Path (Join-Path $Root 'px\px.ini') -Pattern '^\s*server\s*=\s*(.*)$').Matches.Groups[1].Value
-    Show 'upstream configured' $(if ($server.Trim()) { $server.Trim() } else { '(none - Px will not stay running)' })
+    $match = Select-String -Path (Join-Path $Root 'px\px.ini') -Pattern '^\s*server\s*=\s*(.*)$' | Select-Object -First 1
+    $server = if ($match) { $match.Matches[0].Groups[1].Value } else { '' }
+    Show 'upstream configured' $(if ($server.Trim()) { Format-ProxyAddress $server.Trim() } else { '(none - Px will not stay running)' })
 }
 
 Write-Host "`nSend this whole output when reporting a network problem.`n" -ForegroundColor Cyan

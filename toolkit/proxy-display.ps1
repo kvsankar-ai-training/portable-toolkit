@@ -11,3 +11,9 @@ function Format-ProxyAddress($Value) {
     if ("$Value" -match '@') { return '(proxy address with credentials hidden)' }
     return "$Value"
 }
+
+# Also protect free-form output from uv, Px and exception messages before it
+# reaches the GUI log or a copied network report.
+function Protect-ProxyText($Value) {
+    [regex]::Replace("$Value", '(?i)([a-z][a-z0-9+.-]*://)[^\s/]+@', '$1[credentials hidden]@')
+}

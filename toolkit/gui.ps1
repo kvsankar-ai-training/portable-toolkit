@@ -497,7 +497,7 @@ function Copy-LogToClipboard {
 $btnCopyLog.Add_Click({ [void](Copy-LogToClipboard) })
 
 function Write-Log($text) {
-    $txtLog.AppendText("$text`r`n")
+    $txtLog.AppendText("$(Protect-ProxyText $text)`r`n")
 }
 
 # ---- status refresh -----------------------------------------------------

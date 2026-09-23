@@ -79,7 +79,7 @@ try { Set-Content -Path $StatusLog -Value $null -ErrorAction Stop } catch { $Sta
 function Write-Status {
     param([string] $Name, [string] $State, [string] $Detail = '')
     if (-not $StatusLog) { return }
-    try { Add-Content -Path $StatusLog -Value "STATUS|name=$Name|state=$State|detail=$Detail" -ErrorAction Stop } catch { }
+    try { Add-Content -Path $StatusLog -Value "STATUS|name=$Name|state=$State|detail=$(Protect-ProxyText $Detail)" -ErrorAction Stop } catch { }
 }
 
 function Write-LogLine {
@@ -88,7 +88,7 @@ function Write-LogLine {
     # hidden - so the long steps would otherwise look like nothing happening.
     param([string] $Text)
     if (-not $StatusLog) { return }
-    $clean = ($Text -replace '[\r\n]', ' ').Trim()
+    $clean = (Protect-ProxyText ($Text -replace '[\r\n]', ' ')).Trim()
     if (-not $clean) { return }
     try { Add-Content -Path $StatusLog -Value "LOG|$clean" -ErrorAction Stop } catch { }
 }
@@ -169,20 +169,38 @@ function Start-PxRelay($Root, $Upstream) {
     if (-not (Test-Path $px)) { return $null }
 
     $local = 'http://127.0.0.1:3128'
-    if (Test-ProxyReachable $local) { return $local }   # already up
-
-    # Px needs an upstream before it will stay running. If it has none, give it
-    # the one Windows resolved, which is the address the browser uses.
+    if (-not $Upstream) { return $null }
+    $hostPort = ([Uri] $Upstream).Authority
     $ini = Join-Path $Root 'px\px.ini'
-    $configured = $false
+    $saved = $null
     if (Test-Path $ini) {
-        if (Select-String -Path $ini -Pattern '^\s*server\s*=\s*(\S+)' -ErrorAction SilentlyContinue) { $configured = $true }
+        $line = Get-Content $ini -ErrorAction SilentlyContinue | Where-Object { $_ -match '^\s*server\s*=\s*(\S+)' } | Select-Object -First 1
+        if ($line) { $saved = ($line -replace '^\s*server\s*=\s*', '').Trim() }
     }
-    if (-not $configured) {
-        if (-not $Upstream) { return $null }
-        $hostPort = ([Uri] $Upstream).Authority
+
+    # A listening port alone does not prove that it is this Px. Restart our Px
+    # even when the file looks right: it may still be running with older
+    # settings loaded before the file was changed.
+    $owned = @(Get-Process px -ErrorAction SilentlyContinue | Where-Object {
+        try { $_.Path -eq $px } catch { $false }
+    })
+    $listening = Test-ProxyReachable $local
+    if ($listening -and -not $owned.Count) { return $null }
+
+    if ($owned.Count) {
+        Write-Host "  restarting px for this network's proxy"
+        & $px --quit *> $null
+        for ($i = 0; $i -lt 10; $i++) {
+            if (-not (Test-ProxyReachable $local)) { break }
+            Start-Sleep -Milliseconds 200
+        }
+        if (Test-ProxyReachable $local) { return $null }
+    }
+
+    if ($saved -ne $hostPort) {
         Write-Host "  configuring px for this network's proxy: $hostPort"
         & $px --save --proxy=$hostPort *> $null
+        if ($LASTEXITCODE -ne 0) { return $null }
     }
 
     Write-Host "  starting px so uv can get through the proxy"
@@ -237,7 +255,7 @@ function Get-DownloadArgs($Uri, $OutFile) {
             if ($resolved -and $resolved.AbsoluteUri -ne $Uri) {
                 $proxy = $resolved.AbsoluteUri
                 $ie = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
-                $script:ProxyOrigin = if ($ie.AutoConfigURL) { "chosen by the automatic configuration script at $($ie.AutoConfigURL)" }
+                $script:ProxyOrigin = if ($ie.AutoConfigURL) { "chosen by the automatic configuration script at $(Format-ProxyAddress $ie.AutoConfigURL)" }
                                       else { 'from this machine''s Windows proxy setting' }
             }
         } catch { }
@@ -310,7 +328,7 @@ function Install-Tool($tool) {
         Invoke-WebRequest @download
     } catch {
         $status = Get-HttpStatus $_
-        $detail = (($_.Exception.Message -split "`n")[0]).Trim().TrimEnd('.')
+        $detail = (Protect-ProxyText (($_.Exception.Message -split "`n")[0])).Trim().TrimEnd('.')
 
         # A 5xx comes from the proxy, not from the site: it took the request and
         # could not complete it. Whatever the reason - the site blocked by
@@ -328,7 +346,7 @@ function Install-Tool($tool) {
                 $recovered = $true
             } catch {
                 $status = Get-HttpStatus $_
-                $detail = (($_.Exception.Message -split "`n")[0]).Trim().TrimEnd('.')
+                $detail = (Protect-ProxyText (($_.Exception.Message -split "`n")[0])).Trim().TrimEnd('.')
             }
         }
 
@@ -420,7 +438,7 @@ function Invoke-Uv {
     # failure, so judge these calls by their exit code instead.
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    $output = & uv @args 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray; Write-LogLine $_; $_ }
+    $output = & uv @args 2>&1 | ForEach-Object { Write-Host "  $(Protect-ProxyText $_)" -ForegroundColor DarkGray; Write-LogLine $_; $_ }
     $code = $LASTEXITCODE
     $ErrorActionPreference = $previous
     if ($code -ne 0) {
@@ -522,7 +540,7 @@ function Install-MachinePythonPackages($packages) {
 
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    & $machinePython @arguments 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray; Write-LogLine $_ }
+    & $machinePython @arguments 2>&1 | ForEach-Object { Write-Host "  $(Protect-ProxyText $_)" -ForegroundColor DarkGray; Write-LogLine $_ }
     $code = $LASTEXITCODE
     $ErrorActionPreference = $previous
 
@@ -680,7 +698,7 @@ if ($credentialedProxy) {
         Write-Host "  uv will use Px at $localProxy"
         Write-LogLine "uv routed through Px instead of the credential-bearing HTTPS_PROXY setting."
     } else {
-        Write-LogLine "Px could not start for the credential-bearing HTTPS_PROXY setting; uv will try the configured proxy directly."
+        throw "Px could not start for this network's proxy. In the GUI, click Save & start under Corporate proxy, then Install / Fix."
     }
 }
 
