@@ -22,6 +22,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # without this, downloads are very slow
+. (Join-Path $PSScriptRoot 'proxy-display.ps1')
 
 # A proxy that demands NTLM or Kerberos answers 407 to anything that does not
 # offer credentials, and by default .NET offers none. A browser passes because
@@ -59,7 +60,7 @@ foreach ($name in 'HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY') {
     $value = (Get-Item "env:$name" -ErrorAction SilentlyContinue).Value
     if (-not $value) { continue }
     if (Test-ProxyReachable $value) { continue }
-    Write-Host "  $name is set to $value, which is not answering - ignoring it for this install" -ForegroundColor Yellow
+    Write-Host "  $name is set to $(Format-ProxyAddress $value), which is not answering - ignoring it for this install" -ForegroundColor Yellow
     Remove-Item "env:$name" -ErrorAction SilentlyContinue
 }
 
@@ -302,7 +303,7 @@ function Install-Tool($tool) {
     Write-Host "  downloading $($tool.url)"
     $download = Get-DownloadArgs $tool.url $zip
     $hadProxy = $download.ContainsKey('Proxy')
-    $via = if ($hadProxy) { "$($download.Proxy) ($script:ProxyOrigin)" } else { 'no proxy - straight out' }
+    $via = if ($hadProxy) { "$(Format-ProxyAddress $download.Proxy) ($script:ProxyOrigin)" } else { 'no proxy - straight out' }
     Write-Host "  via $via"
 
     try {
@@ -424,11 +425,12 @@ function Invoke-Uv {
     $ErrorActionPreference = $previous
     if ($code -ne 0) {
         $hint = ''
-        if ("$output" -match 'UnknownIssuer|invalid peer certificate|certificate verify failed') {
+        if ("$output" -match 'Timeout \(\d+s\) when waiting for lock') {
+            $hint = " Another uv process is holding the Python install folder. Close any other toolkit setup or uv operation, check for a remaining uv.exe process, then run setup again. Do not delete the .lock file."
+        } elseif ("$output" -match 'UnknownIssuer|invalid peer certificate|certificate verify failed') {
             $hint = " That is a certificate uv does not recognise, which is what a network that inspects TLS looks like. " +
                     "uv is already told to use this machine's certificate store; if it still fails, the company authority " +
-                    "is missing from your user store. Run toolkit
-etwork-check.ps1 - it names who signed the connection."
+                    "is missing from your user store. Run toolkit\network-check.ps1 - it names who signed the connection."
         } elseif (-not $env:HTTPS_PROXY) {
             $hint = " If this is a DNS or connection error, uv may need the proxy address for this network: " +
                     "set HTTPS_PROXY and run setup again."
@@ -438,6 +440,28 @@ etwork-check.ps1 - it names who signed the connection."
         }
         throw ("uv $($args -join ' ') failed with exit code $code." + $hint)
     }
+}
+
+function Get-CompatiblePython {
+    # Reuse a working Python already on PATH before downloading another one.
+    # uv will still create the toolkit's isolated environment from it.
+    $minimum = [version] $config.python.minimum_version
+    $maximum = [version] $config.python.maximum_version_exclusive
+    foreach ($command in @(Get-Command python -All -CommandType Application -ErrorAction SilentlyContinue)) {
+        $exe = $command.Source
+        if (-not $exe -or -not (Test-Path $exe)) { continue }
+        # env.ps1 puts every toolkit tool on PATH. Px bundles a private
+        # python.exe, which is not the participant's Python to build from.
+        if ($exe.StartsWith($InstallRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { continue }
+        try {
+            $version = & $exe --version 2>&1 | Select-Object -First 1
+            if ("$version" -match '^Python (?<minor>3\.\d+)\.\d+') {
+                $minor = [version] $Matches.minor
+                if ($minor -ge $minimum -and $minor -lt $maximum) { return $exe }
+            }
+        } catch { }
+    }
+    return $null
 }
 
 function Export-WindowsRootCertificates($Path) {
@@ -595,8 +619,8 @@ if ($Source -ne $destToolkit) {
     }
 }
 
-# Done before Python, deliberately. The Python download is the longest and
-# most fragile step - a proxy can fail it - and if PATH were updated after it,
+# Done before Python, deliberately. Creating the environment and installing
+# its packages can fail, and if PATH were updated after them,
 # a failure there would leave the tools installed but reachable by nobody,
 # with the GUI reporting everything as not ready. The entries are static
 # paths, so they are just as correct now as later.
@@ -661,27 +685,35 @@ if (-not $env:HTTPS_PROXY) {
         } elseif (Test-ProxyReachable $systemProxy) {
             $chosen = $systemProxy
             Write-Host "  px is not available, so uv goes straight at the proxy"
-            Write-LogLine "uv routed straight at $systemProxy. If it asks uv to authenticate, uv cannot - Px is what answers that."
+            Write-LogLine "uv routed straight at $(Format-ProxyAddress $systemProxy). If it asks uv to authenticate, uv cannot - Px is what answers that."
         }
 
         if ($chosen) {
             $env:HTTP_PROXY = $chosen
             $env:HTTPS_PROXY = $chosen
-            Write-Host "  uv will use $chosen"
+            Write-Host "  uv will use $(Format-ProxyAddress $chosen)"
         }
     }
 }
 
-Write-Host "`nPython $($config.python.version)"
-Write-Status 'python' 'installing'
-Invoke-Uv python install $config.python.version
 $envDir = Join-Path $InstallRoot $config.python.environment
+Write-Host "`nPython environment"
+Write-Status 'python' 'installing'
 if (Test-Path (Join-Path $envDir 'Scripts\python.exe')) {
     Write-Host "  shared environment already exists" -ForegroundColor DarkGray
 } else {
+    $basePython = Get-CompatiblePython
+    if ($basePython) {
+        Write-Host "  using the Python already installed at $basePython"
+        Write-LogLine "Creating the toolkit environment from the Python already installed at $basePython."
+    } else {
+        Write-Host "  no compatible Python found; downloading $($config.python.version)"
+        Invoke-Uv python install $config.python.version
+        $basePython = $config.python.version
+    }
     # --seed puts pip inside the environment. Without it there is no pip here
     # and a bare "pip install" would silently use another Python on the machine.
-    Invoke-Uv venv $envDir --python $config.python.version --seed
+    Invoke-Uv venv $envDir --python $basePython --seed
 }
 Write-Host "  one shared environment at $envDir" -ForegroundColor Green
 Write-Status 'python' 'installed'

@@ -10,6 +10,7 @@ run an automatic configuration script. uv reads proxy environment variables and
 nothing else. When one works and the other does not, this says which.
 #>
 param([string] $StatusLog)
+. (Join-Path $PSScriptRoot 'proxy-display.ps1')
 
 if ($StatusLog) {
     # gui.ps1 runs this hidden and reads LOG| lines out of a file, so that the
@@ -53,14 +54,14 @@ Write-Host "`nWindows proxy settings" -ForegroundColor Cyan
 $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 $ie = Get-ItemProperty $key -ErrorAction SilentlyContinue
 Show 'ProxyEnable' $(if ($ie.ProxyEnable) { $ie.ProxyEnable } else { '0 (no manual proxy)' })
-Show 'ProxyServer' $(if ($ie.ProxyServer) { $ie.ProxyServer } else { '(none)' })
-Show 'AutoConfigURL' $(if ($ie.AutoConfigURL) { $ie.AutoConfigURL } else { '(none)' })
+Show 'ProxyServer' $(if ($ie.ProxyServer) { Format-ProxyAddress $ie.ProxyServer } else { '(none)' })
+Show 'AutoConfigURL' $(if ($ie.AutoConfigURL) { Format-ProxyAddress $ie.AutoConfigURL } else { '(none)' })
 Show 'ProxyOverride' $(if ($ie.ProxyOverride) { $ie.ProxyOverride } else { '(none)' })
 
 Write-Host "`nProxy environment variables" -ForegroundColor Cyan
 foreach ($n in 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY') {
     $v = (Get-Item "env:$n" -ErrorAction SilentlyContinue).Value
-    Show $n $(if ($v) { $v } else { '(not set)' })
+    Show $n $(if ($v -and $n -ne 'NO_PROXY') { Format-ProxyAddress $v } elseif ($v) { $v } else { '(not set)' })
 }
 
 Write-Host "`nWhat Windows would use for each address" -ForegroundColor Cyan

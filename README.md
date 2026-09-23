@@ -15,11 +15,11 @@ or use the green **Code** button above and choose *Download ZIP*.
    extract it. Skipping this makes step 2 fail on some machines.
 2. Double-click **GUI.cmd**.
 3. Press **Install / Fix**, and wait. The log on the right shows what is
-   happening; the longest step is the Python download.
+   happening; downloading and installing the document libraries takes longest.
 
-If it fails, it is nearly always the network. The window checks that by itself
-when setup stops, and writes the result into the log - press **Copy** above the
-log and send it. There is a **Network check** button there to run it any time.
+If a network step fails, the window checks the connection and writes the result
+into the log - press **Copy** above the log and send it. There is a **Network
+check** button there to run it any time.
 
 That is the whole install: the tools, Python, and the libraries that read Word,
 PDF, Excel and PowerPoint. There is nothing to choose and nothing to come back
@@ -41,14 +41,17 @@ It does exactly what the button does.
 
 ### If your machine already has a Python
 
+Setup uses an existing Python 3.10 through 3.14 when one is available, creating
+an isolated toolkit environment from it. Otherwise, it downloads Python 3.13.
+
 Some corporate images install Python for all users. Windows reads machine PATH
 entries before yours, so that Python answers to `python` in every window and
 nothing the toolkit writes to your own PATH can change it.
 
 Setup notices, and installs the same document libraries into that Python too,
 with `pip install --user`. They land under your profile, need no administrator,
-and `uninstall.ps1 -Full` removes them again. The toolkit's own Python is
-untouched. The Status panel has a row for it, and `check.ps1` reports which
+and `uninstall.ps1 -Full` removes them again. The toolkit's environment is
+separate. The Status panel has a row for it, and `check.ps1` reports which
 libraries that Python can actually import.
 
 ## What it installs
@@ -59,7 +62,7 @@ libraries that Python can actually import.
 | Node | 24.21.0 | `SHASUMS256.txt` on nodejs.org |
 | Git (MinGit) | 2.55.0.5 | the SHA-256 table in the Git for Windows release notes |
 | GitHub CLI | 2.101.0 | `checksums.txt` published with the release |
-| Python | 3.13 | fetched by uv |
+| Python | existing supported 3.x (currently 3.10 through 3.14), otherwise 3.13 | toolkit environment created by uv |
 | Px | 0.11.0 | the `.sha256` published beside the release asset |
 
 Every download is checked against the hash its publisher recorded, and the

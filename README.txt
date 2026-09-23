@@ -19,7 +19,10 @@ WHAT TO DO
 2. Double-click GUI.cmd.
 
 3. Press Install / Fix, and wait. The log on the right shows what is
-   happening; the longest step is the Python download.
+   happening; the document libraries take the longest to download and install.
+
+Setup uses Python 3.10 through 3.14 if one is already installed. It creates a
+separate toolkit environment from it. Otherwise, it downloads Python 3.13.
 
 That is the whole install: the tools, Python, and the libraries that read
 Word, PDF, Excel and PowerPoint. There is nothing to choose.
@@ -182,9 +185,9 @@ what it looks like:
 IF SOMETHING GOES WRONG
 -----------------------
 
-If it is a network or proxy problem, the window already has the answer: it
-runs a network check by itself whenever setup fails, and there is a Network
-check button above the log to run it any time. Press Copy and send the log.
+If it is a network or proxy problem, the window runs a network check after
+setup fails. The Network check button above the log can run it any time.
+Press Copy and send the log.
 
 The same check from a console:
 

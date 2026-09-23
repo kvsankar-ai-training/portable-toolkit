@@ -1,5 +1,22 @@
 # Troubleshooting
 
+## Python install times out waiting for `python\.lock`
+
+Another `uv` operation may be using the toolkit's Python folder. Close any
+other toolkit setup window and let any active Python install finish. In a
+PowerShell window, check whether `uv` is still running:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name = 'uv.exe'" |
+    Select-Object ProcessId, ParentProcessId, CreationDate, ExecutablePath
+```
+
+If one is running, identify what started it before ending that operation.
+Once it finishes, run `SETUP.cmd` again. If none is running, try setup once
+more and report the new error if the lock times out again. Do not delete the
+`.lock` file; the file's presence alone does not identify the process holding
+the lock. Increasing `UV_LOCK_TIMEOUT` only makes setup wait longer.
+
 ## SETUP.cmd opens and closes immediately
 
 The window closed before you could read it. Open PowerShell in the toolkit
@@ -415,7 +432,7 @@ So when setup finds such a Python, it installs the same document libraries into
 it as well, with `pip install --user`. Those land under your own profile in
 `%APPDATA%\Python\...\site-packages`: no administrator rights, nothing outside
 your account changes, and `uninstall.ps1 -Full` takes them out again. The
-toolkit's own Python is untouched and still complete.
+toolkit's separate Python environment is untouched and still complete.
 
 `check.ps1` reports which of the libraries that Python can actually import, so
 "it was installed" and "it works" are separate questions with separate answers.

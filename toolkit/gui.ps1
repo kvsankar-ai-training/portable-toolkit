@@ -10,6 +10,7 @@ Run it as:  .\toolkit\gui.ps1   (or double-click GUI.cmd in the folder above)
 #>
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'proxy-display.ps1')
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -88,7 +89,7 @@ function Start-PxForCopilot {
     # Copilot. Sending the app through it then is worse than not using it.
     $saved = Get-SavedPxProxy
     if ($saved -and -not (Test-UpstreamReachable)) {
-        Write-Log "The saved proxy $saved cannot be reached from this network, so Px was not used."
+        Write-Log "The saved proxy $(Format-ProxyAddress $saved) cannot be reached from this network, so Px was not used."
         Write-Log "Copilot will start without a proxy. Press Stop under Px if it is running and still interfering."
         Remove-Item env:HTTP_PROXY, env:HTTPS_PROXY -ErrorAction SilentlyContinue
         return $false
@@ -711,6 +712,12 @@ function Invoke-Tick {
         Read-NewStatusLines   # catch anything written between the last tick and exit
         $code = $script:trackedProcess.ExitCode
         $wasReport = $script:trackedReportsOnly
+        $wasLockTimeout = $false
+        if ($code -ne 0 -and -not $wasReport -and $script:activeStatusLog) {
+            try {
+                $wasLockTimeout = (Get-Content $script:activeStatusLog -Raw -ErrorAction Stop) -match 'Timeout \(\d+s\) when waiting for lock'
+            } catch { }
+        }
         Write-Log "Finished (exit code $code)."
         $script:trackedProcess = $null
         $script:trackedReportsOnly = $false
@@ -738,7 +745,7 @@ function Invoke-Tick {
         # Nearly everything else that fails here fails at the network, and the
         # answer is in this report. Running it unasked means the log already
         # holds what is needed to say why - one Copy, no second round trip.
-        if ($code -ne 0 -and -not $wasReport) {
+        if ($code -ne 0 -and -not $wasReport -and -not $wasLockTimeout) {
             Write-Log ""
             Write-Log "That did not finish. Checking the network so the log says why:"
             Start-NetworkCheck
@@ -799,7 +806,7 @@ $btnPxSave.Add_Click({
     if (-not (Test-Path (Get-PxPath))) { Write-Log "px is not installed yet. Click Install / Fix first."; return }
     if (-not $value) { Write-Log "Enter a proxy address first, e.g. proxy.example.com:8080"; return }
     $px = Get-PxPath
-    Write-Log "Saving proxy $value ..."
+    Write-Log "Saving proxy $(Format-ProxyAddress $value) ..."
     Write-Log (Invoke-Timeboxed -ArgumentList @($px, $value) -Script {
         param($px, $value)
         & $px --save --proxy=$value 2>&1
