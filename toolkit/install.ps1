@@ -666,9 +666,27 @@ $ToolkitRootOverride = $InstallRoot
 # resolve anything and fails with a DNS error. The downloads above are fine
 # because they go through Windows, which does all of that for them.
 #
-# So ask Windows what it would use for a representative address and hand uv the
-# same answer, for this install only. Where the answer is "go direct" this does
-# nothing at all.
+# A credential-bearing HTTPS_PROXY points uv at the authenticating proxy
+# directly. Start Px for that proxy first and give uv its local address instead.
+# The credentials in the URL are neither passed to Px nor printed in the log;
+# Px authenticates with the Windows session.
+$credentialedProxy = $false
+try { $credentialedProxy = [bool]([Uri] $env:HTTPS_PROXY).UserInfo } catch { }
+if ($credentialedProxy) {
+    $localProxy = Start-PxRelay $InstallRoot $env:HTTPS_PROXY
+    if ($localProxy) {
+        $env:HTTP_PROXY = $localProxy
+        $env:HTTPS_PROXY = $localProxy
+        Write-Host "  uv will use Px at $localProxy"
+        Write-LogLine "uv routed through Px instead of the credential-bearing HTTPS_PROXY setting."
+    } else {
+        Write-LogLine "Px could not start for the credential-bearing HTTPS_PROXY setting; uv will try the configured proxy directly."
+    }
+}
+
+# Otherwise ask Windows what it would use for a representative address and hand
+# uv the same answer, for this install only. Where the answer is "go direct" this
+# does nothing at all.
 if (-not $env:HTTPS_PROXY) {
     # Resolve against the address uv actually struggles with. A proxy can let
     # one destination through unauthenticated and challenge the next, so the

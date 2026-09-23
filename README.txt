@@ -23,6 +23,7 @@ WHAT TO DO
 
 Setup uses Python 3.10 through 3.14 if one is already installed. It creates a
 separate toolkit environment from it. Otherwise, it downloads Python 3.13.
+If the proxy setting contains credentials, setup starts Px for the downloads.
 
 That is the whole install: the tools, Python, and the libraries that read
 Word, PDF, Excel and PowerPoint. There is nothing to choose.

@@ -43,6 +43,8 @@ It does exactly what the button does.
 
 Setup uses an existing Python 3.10 through 3.14 when one is available, creating
 an isolated toolkit environment from it. Otherwise, it downloads Python 3.13.
+When a proxy setting contains credentials, setup starts Px and routes uv through
+it for the package downloads.
 
 Some corporate images install Python for all users. Windows reads machine PATH
 entries before yours, so that Python answers to `python` in every window and
