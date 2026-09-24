@@ -10,8 +10,8 @@ Get [**portable-toolkit.zip**](../../releases/latest) from the latest release,
 or use the green **Code** button above and choose *Download ZIP*.
 
 On a Windows x64 machine whose toolkit environment already uses Python 3.13,
-download **portable-toolkit-offline-win313.zip** from the same release if PyPI
-downloads time out. It includes the pinned document-library wheels. Extract it
+download [**portable-toolkit-offline-win313-v1.0.39.zip**](https://sankara.net/downloads/portable-toolkit/portable-toolkit-offline-win313-v1.0.39.zip)
+if PyPI downloads time out. It includes the pinned document-library wheels. Extract it
 and use **GUI.cmd** the same way; setup verifies the bundled wheels and installs
 them without contacting PyPI. It does not support other Python versions.
 
