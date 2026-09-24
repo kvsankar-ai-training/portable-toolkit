@@ -27,9 +27,10 @@ That is the whole install: the tools, Python, and the libraries that read Word,
 PDF, Excel and PowerPoint. There is nothing to choose and nothing to come back
 for.
 
-It downloads roughly 450 MB and uses about 700 MB once installed. Most of that
-is the document libraries, and most of the time is the Python packages. Do it
-before you need it rather than in front of a room.
+The document libraries are the largest download. Setup includes only the
+MarkItDown extras for Word, Excel, PowerPoint and PDF, so it does not fetch
+unrelated Azure, audio or YouTube packages. Do it before you need it rather
+than in front of a room.
 
 ### Without a window
 

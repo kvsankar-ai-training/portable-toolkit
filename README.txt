@@ -30,9 +30,10 @@ If the proxy setting contains credentials, setup starts Px for the downloads.
 That is the whole install: the tools, Python, and the libraries that read
 Word, PDF, Excel and PowerPoint. There is nothing to choose.
 
-It downloads roughly 450 MB, uses about 700 MB once installed, and takes
-several minutes. Most of that is the document libraries. Do it before you
-need it rather than in front of a room.
+The document libraries are the largest download. Setup includes only the
+MarkItDown extras for Word, Excel, PowerPoint and PDF, not unrelated Azure,
+audio or YouTube packages. Do it before you need it rather than in front of
+a room.
 
 If you would rather not use the window, SETUP.cmd does the same thing from a
 command prompt.

@@ -819,10 +819,10 @@ Write-Status 'python' 'installed'
 $packages = @($config.python.packages)
 if ($packages.Count -gt 0) {
     Write-Host "`nPython packages"
-    Write-Host "  this is the longest step - several hundred MB for the document libraries"
+    Write-Host "  this is the longest step - downloading the document libraries"
     Write-Status 'packages' 'installing' "$($packages.Count) packages - the longest step"
     Write-LogLine "Installing $($packages.Count) Python packages: $($packages -join ', ')"
-    Write-LogLine "This is the longest step. Several hundred MB, and uv reports below as it goes."
+    Write-LogLine "This is the longest step. uv reports each step below as it goes."
     Invoke-Uv pip install @packages
     Write-Status 'packages' 'installed'
     Install-MachinePythonPackages $packages
