@@ -27,6 +27,11 @@ Setup uses Python 3.10 through 3.14 if one is already installed. It creates a
 separate toolkit environment from it. Otherwise, it downloads Python 3.13.
 If the proxy setting contains credentials, setup starts Px for the downloads.
 
+If this ZIP contains an offline-wheels folder, setup checks the included files
+and installs the document libraries without contacting PyPI. That bundle is
+for 64-bit Windows Python 3.13 only. Keep C:\tools when replacing an older
+downloaded ZIP; your existing toolkit Python environment will be reused.
+
 That is the whole install: the tools, Python, and the libraries that read
 Word, PDF, Excel and PowerPoint. There is nothing to choose.
 

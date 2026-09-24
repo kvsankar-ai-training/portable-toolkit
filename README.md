@@ -9,6 +9,12 @@ folder, and one command removes it again.
 Get [**portable-toolkit.zip**](../../releases/latest) from the latest release,
 or use the green **Code** button above and choose *Download ZIP*.
 
+On a Windows x64 machine whose toolkit environment already uses Python 3.13,
+download **portable-toolkit-offline-win313.zip** from the same release if PyPI
+downloads time out. It includes the pinned document-library wheels. Extract it
+and use **GUI.cmd** the same way; setup verifies the bundled wheels and installs
+them without contacting PyPI. It does not support other Python versions.
+
 ## Install
 
 1. Right-click the zip, choose **Properties**, tick **Unblock**, click OK, then

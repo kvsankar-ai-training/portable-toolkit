@@ -544,6 +544,14 @@ function Get-CompatiblePython {
     return $null
 }
 
+function Test-OfflinePython($Python) {
+    # The release's offline wheels target CPython 3.13 on Windows x64.
+    try {
+        $tag = & $Python -c 'import sys; print(sys.implementation.name, sys.version_info.major, sys.version_info.minor, int(sys.maxsize > 2**32))' 2>$null
+        return ("$tag".Trim() -eq 'cpython 3 13 1')
+    } catch { return $false }
+}
+
 function Export-WindowsRootCertificates($Path) {
     # The same TLS inspection that stops uv stops pip, and for the same reason:
     # pip trusts the bundle inside certifi and nothing else. Hand it the
@@ -565,7 +573,7 @@ function Export-WindowsRootCertificates($Path) {
     return $Path
 }
 
-function Install-MachinePythonPackages($packages) {
+function Install-MachinePythonPackages($packages, $offlineWheelhouse = $null, $offlineLock = $null) {
     # A Python installed for all users answers to "python" whatever this install
     # does, because Windows reads the machine PATH first. An assistant types
     # "python", so on those machines the document libraries have to be where
@@ -580,6 +588,12 @@ function Install-MachinePythonPackages($packages) {
         return
     }
 
+    if ($offlineWheelhouse -and -not (Test-OfflinePython $machinePython)) {
+        Write-LogLine 'The machine-wide Python is not 64-bit Python 3.13; the offline wheels were not added to it. The toolkit environment remains complete.'
+        Write-Status 'machine-python' 'skipped' 'offline wheels do not match the machine-wide Python'
+        return
+    }
+
     Write-Host "`nA Python installed for all users answers to 'python' here:" -ForegroundColor Yellow
     Write-Host "  $machinePython" -ForegroundColor Yellow
     Write-Host "  Windows reads the machine PATH before yours, so that one wins by name."
@@ -591,7 +605,11 @@ function Install-MachinePythonPackages($packages) {
     $pem = Export-WindowsRootCertificates (Join-Path $InstallRoot 'certs\windows-roots.pem')
     $arguments = @('-m', 'pip', 'install', '--user', '--disable-pip-version-check', '--no-warn-script-location')
     if ($pem) { $arguments += @('--cert', $pem) }
-    $arguments += $packages
+    if ($offlineWheelhouse) {
+        $arguments += @('--no-index', '--find-links', $offlineWheelhouse, '-r', $offlineLock)
+    } else {
+        $arguments += $packages
+    }
 
     # What that Python already had, so a later removal takes out only what
     # this added. Several of these packages are common enough to be there
@@ -739,6 +757,9 @@ if ($answer -eq '' -or $answer -eq 'y') {
 $ToolkitRootOverride = $InstallRoot
 . (Join-Path $Source 'env.ps1')
 
+$offlineWheelhouse = Join-Path (Split-Path -Parent $Source) 'offline-wheels\win_amd64-cp313'
+$offlineBundle = Test-Path $offlineWheelhouse
+
 # uv reads proxy environment variables and nothing else. It does not consult
 # Windows' proxy settings and cannot run an automatic configuration script, so
 # on a network where those decide how traffic leaves - and where external names
@@ -750,8 +771,13 @@ $ToolkitRootOverride = $InstallRoot
 # directly. Start Px for that proxy first and give uv its local address instead.
 # The credentials in the URL are neither passed to Px nor printed in the log;
 # Px authenticates with the Windows session.
+if ($offlineBundle) {
+    Write-LogLine 'Offline document bundle detected; package installation will not contact PyPI or need Px.'
+}
 $credentialedProxy = $false
-try { $credentialedProxy = [bool]([Uri] $env:HTTPS_PROXY).UserInfo } catch { }
+if (-not $offlineBundle) {
+    try { $credentialedProxy = [bool]([Uri] $env:HTTPS_PROXY).UserInfo } catch { }
+}
 if ($credentialedProxy) {
     $localProxy = Start-PxRelay $InstallRoot $env:HTTPS_PROXY
     if ($localProxy) {
@@ -767,7 +793,7 @@ if ($credentialedProxy) {
 # Otherwise ask Windows what it would use for a representative address and hand
 # uv the same answer, for this install only. Where the answer is "go direct" this
 # does nothing at all.
-if (-not $env:HTTPS_PROXY) {
+if (-not $offlineBundle -and -not $env:HTTPS_PROXY) {
     # Resolve against the address uv actually struggles with. A proxy can let
     # one destination through unauthenticated and challenge the next, so the
     # Python download succeeding says nothing about the packages that follow.
@@ -795,6 +821,9 @@ if (-not $env:HTTPS_PROXY) {
 }
 
 $envDir = Join-Path $InstallRoot $config.python.environment
+if ($offlineBundle -and -not (Test-Path (Join-Path $envDir 'Scripts\python.exe'))) {
+    throw 'The offline bundle requires an existing toolkit Python 3.13 environment. Use the regular toolkit ZIP for the first Python setup.'
+}
 Write-Host "`nPython environment"
 Write-Status 'python' 'installing'
 if (Test-Path (Join-Path $envDir 'Scripts\python.exe')) {
@@ -823,9 +852,35 @@ if ($packages.Count -gt 0) {
     Write-Status 'packages' 'installing' "$($packages.Count) packages - the longest step"
     Write-LogLine "Installing $($packages.Count) Python packages: $($packages -join ', ')"
     Write-LogLine "This is the longest step. uv reports each step below as it goes."
-    Invoke-Uv pip install @packages
+    $offlineLock = Join-Path $Source 'offline-win313.lock'
+    if ($offlineBundle) {
+        if (-not (Test-OfflinePython (Join-Path $envDir 'Scripts\python.exe'))) {
+            throw 'This offline package bundle requires 64-bit Python 3.13 in the toolkit environment. Use the regular toolkit ZIP for another Python version.'
+        }
+        $locked = @(Get-Content $offlineLock | Where-Object { $_ -match '^[A-Za-z0-9_-]+==' })
+        $wheels = @(Get-ChildItem $offlineWheelhouse -Filter '*.whl' -File)
+        if ($wheels.Count -ne $locked.Count) { throw "Offline package bundle is incomplete: $($wheels.Count) wheels for $($locked.Count) locked packages." }
+        $hashes = @(Get-Content (Join-Path $Source 'offline-win313.sha256'))
+        if ($hashes.Count -ne $wheels.Count) { throw 'Offline package hash list does not match the wheels.' }
+        foreach ($entry in $hashes) {
+            if ($entry -notmatch '^(?<hash>[0-9a-fA-F]{64})  (?<file>[^\\/]+\.whl)$') { throw 'Offline package hash list is invalid.' }
+            $expectedHash = $Matches.hash
+            $file = $Matches.file
+            $wheel = Join-Path $offlineWheelhouse $file
+            if (-not (Test-Path $wheel)) { throw "Offline package is missing: $file" }
+            $actual = (Get-FileHash $wheel -Algorithm SHA256).Hash
+            if ($actual -ne $expectedHash) { throw "Offline package checksum mismatch: $file" }
+        }
+        Write-Host "  using $($wheels.Count) bundled wheels; no PyPI requests" -ForegroundColor Green
+        Write-LogLine "Installing $($wheels.Count) bundled wheels without contacting PyPI."
+        Invoke-Uv pip install --offline --no-index --find-links $offlineWheelhouse -r $offlineLock
+    } else {
+        $offlineWheelhouse = $null
+        $offlineLock = $null
+        Invoke-Uv pip install @packages
+    }
     Write-Status 'packages' 'installed'
-    Install-MachinePythonPackages $packages
+    Install-MachinePythonPackages $packages $offlineWheelhouse $offlineLock
 } else {
     Write-Status 'packages' 'skipped' 'tools.json lists none'
     Write-Status 'machine-python' 'skipped' 'tools.json lists no packages'
