@@ -20,6 +20,8 @@ WHAT TO DO
 
 3. Press Install / Fix, and wait. The log on the right shows what is
    happening; the document libraries take the longest to download and install.
+   uv's detailed output appears as it arrives, with an elapsed-time update
+   every 15 seconds even when uv is quiet.
 
 Setup uses Python 3.10 through 3.14 if one is already installed. It creates a
 separate toolkit environment from it. Otherwise, it downloads Python 3.13.

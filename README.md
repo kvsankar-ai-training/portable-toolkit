@@ -16,6 +16,8 @@ or use the green **Code** button above and choose *Download ZIP*.
 2. Double-click **GUI.cmd**.
 3. Press **Install / Fix**, and wait. The log on the right shows what is
    happening; downloading and installing the document libraries takes longest.
+   During that step, uv's detailed output appears as it arrives, with an
+   elapsed-time update every 15 seconds even when uv is quiet.
 
 If a network step fails, the window checks the connection and writes the result
 into the log - press **Copy** above the log and send it. There is a **Network

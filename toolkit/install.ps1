@@ -433,28 +433,90 @@ function Install-Tool($tool) {
     Restart-Stopped $tool $wasRunning
 }
 
+function Write-UvEvents($SourceId, $Output) {
+    # DataReceived events are queued in this PowerShell runspace. Drain them
+    # while uv is running so the GUI receives each completed line promptly.
+    foreach ($event in @(Get-Event -SourceIdentifier $SourceId -ErrorAction SilentlyContinue)) {
+        $line = $event.SourceEventArgs.Data
+        if ($null -ne $line -and $line -ne '') {
+            Write-Host "  $(Protect-ProxyText $line)" -ForegroundColor DarkGray
+            Write-LogLine $line
+            $Output.Add($line)
+        }
+        Remove-Event -EventIdentifier $event.EventIdentifier
+    }
+}
+
 function Invoke-Uv {
-    # uv reports progress on the error stream. PowerShell would treat that as a
-    # failure, so judge these calls by their exit code instead.
-    $previous = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    $output = & uv @args 2>&1 | ForEach-Object { Write-Host "  $(Protect-ProxyText $_)" -ForegroundColor DarkGray; Write-LogLine $_; $_ }
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = $previous
+    # Stream uv's completed lines through PowerShell's event queue. A normal
+    # pipe forwards lines but cannot show anything when uv is silent for
+    # minutes; the heartbeat below makes that wait visible in the GUI.
+    $uv = Join-Path $InstallRoot 'uv\uv.exe'
+    $uvArgs = @($args)
+    if ($uvArgs.Count -ge 2 -and $uvArgs[0] -eq 'pip' -and $uvArgs[1] -eq 'install') {
+        $uvArgs = @('-v') + $uvArgs
+    }
+    $arguments = ($uvArgs | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ' '
+    $output = New-Object System.Collections.Generic.List[string]
+    $started = Get-Date
+    $lastHeartbeat = $started
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $uv
+    $psi.Arguments = $arguments
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $psi
+    $outId = 'portable-toolkit-uv-out-' + [guid]::NewGuid().ToString('N')
+    $errId = 'portable-toolkit-uv-err-' + [guid]::NewGuid().ToString('N')
+    try {
+        Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -SourceIdentifier $outId | Out-Null
+        Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -SourceIdentifier $errId | Out-Null
+        [void] $process.Start()
+        $process.BeginOutputReadLine()
+        $process.BeginErrorReadLine()
+        while (-not $process.HasExited) {
+            Write-UvEvents $outId $output
+            Write-UvEvents $errId $output
+            if (((Get-Date) - $lastHeartbeat).TotalSeconds -ge 15) {
+                $elapsed = [int] ((Get-Date) - $started).TotalSeconds
+                $message = "uv is still working ($elapsed seconds elapsed)."
+                Write-Host "  $message" -ForegroundColor DarkGray
+                Write-LogLine $message
+                $lastHeartbeat = Get-Date
+            }
+            Start-Sleep -Milliseconds 500
+        }
+        $process.WaitForExit()
+        Write-UvEvents $outId $output
+        Write-UvEvents $errId $output
+        $code = $process.ExitCode
+    } finally {
+        Unregister-Event -SourceIdentifier $outId -ErrorAction SilentlyContinue
+        Unregister-Event -SourceIdentifier $errId -ErrorAction SilentlyContinue
+        $process.Dispose()
+    }
     if ($code -ne 0) {
         $hint = ''
-        if ("$output" -match 'Timeout \(\d+s\) when waiting for lock') {
+        $outputText = $output -join "`n"
+        if ($outputText -match 'Timeout \(\d+s\) when waiting for lock') {
             $hint = " Another uv process is holding the Python install folder. Close any other toolkit setup or uv operation, check for a remaining uv.exe process, then run setup again. Do not delete the .lock file."
-        } elseif ("$output" -match 'UnknownIssuer|invalid peer certificate|certificate verify failed') {
+        } elseif ($outputText -match 'UnknownIssuer|invalid peer certificate|certificate verify failed') {
             $hint = " That is a certificate uv does not recognise, which is what a network that inspects TLS looks like. " +
                     "uv is already told to use this machine's certificate store; if it still fails, the company authority " +
                     "is missing from your user store. Run toolkit\network-check.ps1 - it names who signed the connection."
+        } elseif ($outputText -match 'operation timed out|timed out') {
+            $hint = " A uv download timed out. Retry setup once; uv keeps successful downloads in its cache. " +
+                    "If the same host times out again, ask the network team to check that download through Px."
+        } elseif ($outputText -match 'HTTP 407|Proxy Authentication Required|proxy authorization') {
+            $hint = " The proxy asked uv to authenticate. Check that Px is configured and running for this network, then run setup again."
         } elseif (-not $env:HTTPS_PROXY) {
             $hint = " If this is a DNS or connection error, uv may need the proxy address for this network: " +
                     "set HTTPS_PROXY and run setup again."
         } elseif ($code -ne 0) {
-            $hint = " If it mentions proxy authorization, the proxy wants credentials uv cannot give. Px supplies them: check it is configured for this network with run.cmd px --save --proxy=host:port, " +
-                    "then run setup again."
+            $hint = " Run toolkit\network-check.ps1 and send the full error so the failed address can be diagnosed."
         }
         throw ("uv $($args -join ' ') failed with exit code $code." + $hint)
     }
