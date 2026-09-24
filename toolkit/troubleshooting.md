@@ -1,5 +1,12 @@
 # Troubleshooting
 
+## The window says `Finished (exit code -196608)` without any setup log
+
+In versions through 1.0.35, the window did not quote a script path containing
+spaces when starting PowerShell. Setup and Network check both stopped before
+they could write a log line. Use version 1.0.36 or newer. Keep the installed
+`C:\tools` folder; replace only the downloaded ZIP and extracted folder.
+
 ## Python install times out waiting for `python\.lock`
 
 Another `uv` operation may be using the toolkit's Python folder. Close any

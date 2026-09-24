@@ -668,9 +668,13 @@ function Start-Tracked {
     $script:activeStatusLog = $statusLogPath
     $script:statusLogOffset = 0
     Write-Log "$label ..."
-    $script:trackedProcess = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -PassThru -ArgumentList (
-        @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath) + $extraArgs
-    )
+    # Start-Process joins an ArgumentList array into one command line without
+    # quoting its elements. The extracted folder and status log can both have
+    # spaces in their paths; without quotes, powershell.exe exits before the
+    # script starts, with no status lines for the window to show.
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath) + $extraArgs
+    $quotedArguments = $arguments | ForEach-Object { '"' + $_ + '"' }
+    $script:trackedProcess = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -PassThru -ArgumentList ($quotedArguments -join ' ')
 }
 
 function Sync-Environment {
@@ -712,6 +716,11 @@ function Invoke-Tick {
         Read-NewStatusLines   # catch anything written between the last tick and exit
         $code = $script:trackedProcess.ExitCode
         $wasReport = $script:trackedReportsOnly
+        $hadStatusLog = $false
+        try {
+            $hadStatusLog = $script:activeStatusLog -and (Test-Path $script:activeStatusLog) -and
+                ((Get-Item $script:activeStatusLog).Length -gt 0)
+        } catch { }
         $wasLockTimeout = $false
         if ($code -ne 0 -and -not $wasReport -and $script:activeStatusLog) {
             try {
@@ -738,6 +747,16 @@ function Invoke-Tick {
             Write-Log "That is antivirus quarantining it, not a fault here and not a network problem."
             Write-Log "It needs an exclusion for this folder from whoever manages endpoint security."
             Write-Log "See 'Antivirus quarantined the toolkit' in toolkit\troubleshooting.md."
+            Update-Status
+            return
+        }
+
+        if ($code -ne 0 -and -not $wasReport -and -not $hadStatusLog) {
+            Write-Log ""
+            Write-Log "The action stopped before it could write a log line."
+            if ((Split-Path -Leaf $script:trackedScript) -eq 'install.ps1') {
+                Write-Log "Run SETUP.cmd from this folder to see the PowerShell error."
+            }
             Update-Status
             return
         }
