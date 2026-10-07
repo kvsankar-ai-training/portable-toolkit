@@ -1,0 +1,136 @@
+<!doctype html>
+<!-- Infographic source. Render with the project-infographic skill:
+     render.py portable-toolkit-infographic.html portable-toolkit-infographic.png
+     Facts come from README.md; update both together. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="infographic.css">
+<style>
+  .flow { grid-template-columns: 1fr 48px 1.7fr 48px 1fr; }
+  .core-grid { display: grid; grid-template-rows: auto auto 1fr; gap: 10px; flex: 1; min-height: 0; }
+  .steps { grid-template-columns: repeat(3, 1fr); }
+  .tiles { grid-template-columns: 1fr 1fr; }
+</style>
+</head>
+<body>
+
+<header class="title">
+  <h1>portable-toolkit</h1>
+  <p>Developer tools for coding agents on locked-down Windows</p>
+</header>
+
+<main class="flow">
+
+  <section class="zone input">
+    <h2>When to use it</h2>
+    <div class="card">
+      <i data-icon="bot"></i>
+      <div><h3>Your agent uses the machine's tools</h3>
+        <p>e.g. the GitHub Copilot desktop app bundles no Node.js or Python</p></div>
+    </div>
+    <div class="card">
+      <i data-icon="lock-keyhole"></i>
+      <div><h3>No administrator rights</h3>
+        <p>corporate laptops where installing software needs a request</p></div>
+    </div>
+    <div class="card">
+      <i data-icon="globe-lock"></i>
+      <div><h3>Behind a corporate proxy</h3>
+        <p>a proxy that needs Windows (NTLM or Kerberos) sign-in</p></div>
+    </div>
+    <div class="card">
+      <i data-icon="calendar-clock"></i>
+      <div><h3>Before you need it</h3>
+        <p>the document libraries are the largest download; install ahead of time</p></div>
+    </div>
+  </section>
+
+  <div class="arrow"><i data-icon="arrow-right"></i></div>
+
+  <section class="zone core">
+    <h2>Setup: one window, one folder</h2>
+    <div class="core-grid">
+      <div class="steps">
+        <div class="step">
+          <div class="head"><span class="num">1</span><i data-icon="folder-archive"></i></div><h3>Extract the ZIP</h3>
+          <p>unblock it, then extract</p>
+        </div>
+        <div class="step">
+          <div class="head"><span class="num">2</span><i data-icon="mouse-pointer-click"></i></div><h3>Install / Fix</h3>
+          <p>in GUI.cmd, or run SETUP.cmd</p>
+        </div>
+        <div class="step">
+          <div class="head"><span class="num">3</span><i data-icon="shield-check"></i></div><h3>Verify downloads</h3>
+          <p>publisher's hash; stops on a mismatch</p>
+        </div>
+      </div>
+      <div class="sub">
+        <h4>Installs into C:&#92;tools</h4>
+        <div class="tiles">
+          <div class="tile"><i data-icon="package"></i><div><b>uv</b><span>Python package manager</span></div></div>
+          <div class="tile"><i data-icon="hexagon"></i><div><b>Node</b><span>JavaScript runtime + npm</span></div></div>
+          <div class="tile"><i data-icon="git-branch"></i><div><b>Git</b><span>MinGit</span></div></div>
+          <div class="tile"><i data-icon="square-terminal"></i><div><b>GitHub CLI</b><span>gh</span></div></div>
+          <div class="tile"><i data-icon="file-code"></i><div><b>Python</b><span>existing 3.10–3.14, else 3.13</span></div></div>
+          <div class="tile"><i data-icon="network"></i><div><b>Px</b><span>NTLM / Kerberos proxy relay</span></div></div>
+          <div class="tile" style="grid-column: span 2"><i data-icon="file-text"></i><div><b>Document libraries</b><span>read Word, Excel, PowerPoint and PDF files</span></div></div>
+        </div>
+      </div>
+      <div class="sub">
+        <h4>Made for locked-down machines</h4>
+        <div class="tiles">
+          <div class="tile"><i data-icon="recycle"></i><div><b>Reuses your Python</b><span>an existing 3.10 to 3.14 gets an isolated toolkit environment</span></div></div>
+          <div class="tile"><i data-icon="network"></i><div><b>Px for downloads</b><span>started when the proxy setting holds credentials</span></div></div>
+          <div class="tile"><i data-icon="folder-input"></i><div><b>Falls back to your profile</b><span>%USERPROFILE%&#92;tools if C:&#92;tools is not allowed</span></div></div>
+          <div class="tile"><i data-icon="users"></i><div><b>All-users Python too</b><span>gets the libraries with pip --user, no administrator</span></div></div>
+          <div class="tile" style="grid-column: span 2"><i data-icon="wifi"></i><div><b>Network check on failure</b><span>the window tests the connection and logs the result; one button copies the log</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow"><i data-icon="arrow-right"></i></div>
+
+  <section class="zone output">
+    <h2>What you get</h2>
+    <div class="card">
+      <i data-icon="app-window"></i>
+      <div><h3>One window for everything</h3>
+        <p>install, status, remove, Px and Copilot, with a log beside them</p></div>
+    </div>
+    <div class="card">
+      <i data-icon="terminal"></i>
+      <div><h3>Tools answer by name</h3>
+        <p>python, node and git work in new windows</p></div>
+    </div>
+    <div class="card">
+      <i data-icon="rocket"></i>
+      <div><h3>Copilot with fresh settings</h3>
+        <p>starts Px if configured and points the app at it</p></div>
+    </div>
+    <div class="card">
+      <i data-icon="stethoscope"></i>
+      <div><h3>A check you can run</h3>
+        <p>check.ps1 shows which python and node answer</p></div>
+    </div>
+    <div class="card">
+      <i data-icon="undo-2"></i>
+      <div><h3>One command removes it</h3>
+        <p>uninstall.ps1 undoes the folder and PATH</p></div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="strip">
+  <span class="item"><i data-icon="shield-off"></i>No administrator</span>
+  <span class="item"><i data-icon="folder-tree"></i>One folder, five PATH entries</span>
+  <span class="item"><i data-icon="shield-check"></i>Hash-verified downloads</span>
+  <span class="item"><i data-icon="undo-2"></i>Fully reversible</span>
+  <span class="item"><i data-icon="file-code"></i>Plain-text scripts you can read</span>
+  <span class="item"><i data-icon="wifi-off"></i>Offline bundle if PyPI times out</span>
+</footer>
+
+</body>
+</html>
