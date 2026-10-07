@@ -4,6 +4,22 @@ Installs Git, Node, uv, Python and Px on a Windows machine without
 administrator rights and without a software request. Everything lands in one
 folder, and one command removes it again.
 
+## When to use it
+
+Use it on a Windows machine where any of these is true:
+
+- **Your coding agent relies on the machine's own tools.** Some coding agents,
+  such as the GitHub Copilot desktop app, do not bundle their own Node.js or
+  Python environments and libraries. They run whatever is installed on the
+  machine, so their work fails when those tools are missing.
+- **You do not have administrator rights.** This is common on corporate
+  laptops, where installing software normally needs a request. The toolkit
+  installs into a single folder (`C:\tools`, or one under your profile) and
+  changes only your own PATH.
+- **Your web requests go through a corporate proxy.** Many tools cannot sign in
+  to a proxy that needs Windows authentication. The toolkit includes Px, which
+  handles the proxy's NTLM or Kerberos sign-in for them.
+
 ## Download
 
 Get [**portable-toolkit.zip**](../../releases/latest) from the latest release,
