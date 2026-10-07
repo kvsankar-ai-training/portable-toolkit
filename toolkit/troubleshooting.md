@@ -288,8 +288,10 @@ the tools come from, whether `uv` can reach them with and without a proxy, and
 what state Px is in.
 
 The window has a **Network check** button above its log, and runs the same
-check by itself whenever setup fails - so after a failure the log already holds
-this. Press **Copy** next to it and send the whole thing when reporting a
+check by itself whenever setup fails for a reason that could be the network -
+so after such a failure the log already holds this. A failure on the machine
+itself, such as a damaged offline bundle or a file another program holds open,
+gets no network report; the error line names the cause. Press **Copy** next to it and send the whole thing when reporting a
 problem. The useful distinction it draws
 is between Windows reaching a site and `uv` reaching it: the tools download
 through Windows, `uv` does not, and a failure in one and not the other points

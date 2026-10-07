@@ -18,6 +18,7 @@ $config = Get-Content (Join-Path $PSScriptRoot 'tools.json') -Raw | ConvertFrom-
 # Get-MachineWidePython and Get-MachinePythonMarker live here, so this window
 # and the installer decide the same way what a bare "python" reaches.
 . (Join-Path $PSScriptRoot 'paths.ps1')
+. (Join-Path $PSScriptRoot 'failure.ps1')
 
 function Resolve-InstallRoot {
     # Where install.ps1 actually put things, which is not necessarily wherever
@@ -721,11 +722,11 @@ function Invoke-Tick {
             $hadStatusLog = $script:activeStatusLog -and (Test-Path $script:activeStatusLog) -and
                 ((Get-Item $script:activeStatusLog).Length -gt 0)
         } catch { }
-        $wasLockTimeout = $false
+        $isNetworkFailure = $false
         if ($code -ne 0 -and -not $wasReport -and $script:activeStatusLog) {
-            try {
-                $wasLockTimeout = (Get-Content $script:activeStatusLog -Raw -ErrorAction Stop) -match 'Timeout \(\d+s\) when waiting for lock'
-            } catch { }
+            $statusText = $null
+            try { $statusText = Get-Content $script:activeStatusLog -Raw -ErrorAction Stop } catch { }
+            $isNetworkFailure = Test-NetworkFailure (Split-Path -Leaf $script:trackedScript) $statusText
         }
         Write-Log "Finished (exit code $code)."
         $script:trackedProcess = $null
@@ -761,13 +762,18 @@ function Invoke-Tick {
             return
         }
 
-        # Nearly everything else that fails here fails at the network, and the
-        # answer is in this report. Running it unasked means the log already
-        # holds what is needed to say why - one Copy, no second round trip.
-        if ($code -ne 0 -and -not $wasReport -and -not $wasLockTimeout) {
+        # Most install failures are at the network, and the answer is in this
+        # report. Running it unasked means the log already holds what is needed
+        # to say why - one Copy, no second round trip. A failure on this machine
+        # alone gets no report, which would only point at the wrong cause.
+        if ($code -ne 0 -and -not $wasReport) {
             Write-Log ""
-            Write-Log "That did not finish. Checking the network so the log says why:"
-            Start-NetworkCheck
+            if ($isNetworkFailure) {
+                Write-Log "That did not finish. Checking the network so the log says why:"
+                Start-NetworkCheck
+            } else {
+                Write-Log "That did not finish. The error above is about this machine, not the network."
+            }
         }
     }
     Update-Status
