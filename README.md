@@ -59,17 +59,18 @@ and `uninstall.ps1 -Full` removes them again. The toolkit's environment is
 separate. The Status panel has a row for it, and `check.ps1` reports which
 libraries that Python can actually import.
 
-### Offline document bundle (only for an existing installation)
+### Offline document bundle (only if PyPI downloads time out)
 
-Use this only when the regular ZIP has already set up the toolkit on the
-machine with 64-bit Python 3.13, and the document-library download from PyPI
-keeps timing out. The bundle does not include Python or the other toolkit
-programs, and on a machine without that setup it stops with an error.
+Use this only when the document-library download from PyPI keeps timing out.
+It is for 64-bit Windows, and its libraries fit Python 3.13 only.
 
-Download [portable-toolkit-offline-win313-v1.0.39.zip](https://sankara.net/downloads/portable-toolkit/portable-toolkit-offline-win313-v1.0.39.zip),
+Download [portable-toolkit-offline-win313-v1.0.40.zip](https://sankara.net/downloads/portable-toolkit/portable-toolkit-offline-win313-v1.0.40.zip),
 extract it, and use **GUI.cmd** the same way. Setup verifies the bundled
-wheels and installs them without contacting PyPI. It does not support other
-Python versions.
+wheels and installs them without contacting PyPI. If the toolkit has no Python
+environment yet, setup builds one from an installed 64-bit Python 3.13, or
+downloads Python 3.13 first; that download needs the network. A toolkit
+environment that already uses another Python version is not supported; use the
+regular ZIP there.
 
 ## What it installs
 
