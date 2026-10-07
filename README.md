@@ -182,3 +182,8 @@ Adding a tool is an edit to `tools.json`, not to any script.
 See [`toolkit/troubleshooting.md`](toolkit/troubleshooting.md), which covers
 execution policy, Mark-of-the-Web, proxies, checksum mismatches, AppLocker and
 PATH precedence.
+
+## Releasing
+
+See [`docs/releasing.md`](docs/releasing.md) for how the two ZIPs are built,
+published and verified.
