@@ -9,12 +9,6 @@ folder, and one command removes it again.
 Get [**portable-toolkit.zip**](../../releases/latest) from the latest release,
 or use the green **Code** button above and choose *Download ZIP*.
 
-On a Windows x64 machine whose toolkit environment already uses Python 3.13,
-download [**portable-toolkit-offline-win313-v1.0.39.zip**](https://sankara.net/downloads/portable-toolkit/portable-toolkit-offline-win313-v1.0.39.zip)
-if PyPI downloads time out. It includes the pinned document-library wheels. Extract it
-and use **GUI.cmd** the same way; setup verifies the bundled wheels and installs
-them without contacting PyPI. It does not support other Python versions.
-
 ## Install
 
 1. Right-click the zip, choose **Properties**, tick **Unblock**, click OK, then
@@ -64,6 +58,18 @@ with `pip install --user`. They land under your profile, need no administrator,
 and `uninstall.ps1 -Full` removes them again. The toolkit's environment is
 separate. The Status panel has a row for it, and `check.ps1` reports which
 libraries that Python can actually import.
+
+### Offline document bundle (only for an existing installation)
+
+Use this only when the regular ZIP has already set up the toolkit on the
+machine with 64-bit Python 3.13, and the document-library download from PyPI
+keeps timing out. The bundle does not include Python or the other toolkit
+programs, and on a machine without that setup it stops with an error.
+
+Download [portable-toolkit-offline-win313-v1.0.39.zip](https://sankara.net/downloads/portable-toolkit/portable-toolkit-offline-win313-v1.0.39.zip),
+extract it, and use **GUI.cmd** the same way. Setup verifies the bundled
+wheels and installs them without contacting PyPI. It does not support other
+Python versions.
 
 ## What it installs
 
