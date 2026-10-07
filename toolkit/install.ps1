@@ -67,6 +67,7 @@ foreach ($name in 'HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY') {
 $Source = $PSScriptRoot
 $config = Get-Content (Join-Path $Source 'tools.json') -Raw | ConvertFrom-Json
 . (Join-Path $Source 'paths.ps1')
+. (Join-Path $Source 'python-env.ps1')
 
 # A parseable line per step, beside install.ps1 itself so it exists regardless
 # of where the install root ends up. A caller that wants granular progress
@@ -522,36 +523,6 @@ function Invoke-Uv {
     }
 }
 
-function Get-CompatiblePython {
-    # Reuse a working Python already on PATH before downloading another one.
-    # uv will still create the toolkit's isolated environment from it.
-    $minimum = [version] $config.python.minimum_version
-    $maximum = [version] $config.python.maximum_version_exclusive
-    foreach ($command in @(Get-Command python -All -CommandType Application -ErrorAction SilentlyContinue)) {
-        $exe = $command.Source
-        if (-not $exe -or -not (Test-Path $exe)) { continue }
-        # env.ps1 puts every toolkit tool on PATH. Px bundles a private
-        # python.exe, which is not the participant's Python to build from.
-        if ($exe.StartsWith($InstallRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { continue }
-        try {
-            $version = & $exe --version 2>&1 | Select-Object -First 1
-            if ("$version" -match '^Python (?<minor>3\.\d+)\.\d+') {
-                $minor = [version] $Matches.minor
-                if ($minor -ge $minimum -and $minor -lt $maximum) { return $exe }
-            }
-        } catch { }
-    }
-    return $null
-}
-
-function Test-OfflinePython($Python) {
-    # The release's offline wheels target CPython 3.13 on Windows x64.
-    try {
-        $tag = & $Python -c 'import sys; print(sys.implementation.name, sys.version_info.major, sys.version_info.minor, int(sys.maxsize > 2**32))' 2>$null
-        return ("$tag".Trim() -eq 'cpython 3 13 1')
-    } catch { return $false }
-}
-
 function Export-WindowsRootCertificates($Path) {
     # The same TLS inspection that stops uv stops pip, and for the same reason:
     # pip trusts the bundle inside certifi and nothing else. Hand it the
@@ -760,6 +731,16 @@ $ToolkitRootOverride = $InstallRoot
 $offlineWheelhouse = Join-Path (Split-Path -Parent $Source) 'offline-wheels\win_amd64-cp313'
 $offlineBundle = Test-Path $offlineWheelhouse
 
+$envDir = Join-Path $InstallRoot $config.python.environment
+$envExists = Test-Path (Join-Path $envDir 'Scripts\python.exe')
+$base = $null
+if (-not $envExists) {
+    $base = Select-BasePython (Get-CompatiblePythons $InstallRoot $config) $config.python.version -Offline:$offlineBundle
+}
+# The offline bundle needs the network only to download Python 3.13, when there
+# is neither a toolkit environment nor a 64-bit Python 3.13 to build one from.
+$needsNetwork = (-not $offlineBundle) -or ($base -and -not $base.Python)
+
 # uv reads proxy environment variables and nothing else. It does not consult
 # Windows' proxy settings and cannot run an automatic configuration script, so
 # on a network where those decide how traffic leaves - and where external names
@@ -773,9 +754,12 @@ $offlineBundle = Test-Path $offlineWheelhouse
 # Px authenticates with the Windows session.
 if ($offlineBundle) {
     Write-LogLine 'Offline document bundle detected; package installation will not contact PyPI or need Px.'
+    if ($needsNetwork) {
+        Write-LogLine 'There is no toolkit Python environment yet and no 64-bit Python 3.13 to build it from, so setup downloads Python 3.13 first.'
+    }
 }
 $credentialedProxy = $false
-if (-not $offlineBundle) {
+if ($needsNetwork) {
     try { $credentialedProxy = [bool]([Uri] $env:HTTPS_PROXY).UserInfo } catch { }
 }
 if ($credentialedProxy) {
@@ -793,7 +777,7 @@ if ($credentialedProxy) {
 # Otherwise ask Windows what it would use for a representative address and hand
 # uv the same answer, for this install only. Where the answer is "go direct" this
 # does nothing at all.
-if (-not $offlineBundle -and -not $env:HTTPS_PROXY) {
+if ($needsNetwork -and -not $env:HTTPS_PROXY) {
     # Resolve against the address uv actually struggles with. A proxy can let
     # one destination through unauthenticated and challenge the next, so the
     # Python download succeeding says nothing about the packages that follow.
@@ -820,27 +804,20 @@ if (-not $offlineBundle -and -not $env:HTTPS_PROXY) {
     }
 }
 
-$envDir = Join-Path $InstallRoot $config.python.environment
-if ($offlineBundle -and -not (Test-Path (Join-Path $envDir 'Scripts\python.exe'))) {
-    throw 'The offline bundle requires an existing toolkit Python 3.13 environment. Use the regular toolkit ZIP for the first Python setup.'
-}
 Write-Host "`nPython environment"
 Write-Status 'python' 'installing'
-if (Test-Path (Join-Path $envDir 'Scripts\python.exe')) {
+if ($envExists) {
     Write-Host "  shared environment already exists" -ForegroundColor DarkGray
 } else {
-    $basePython = Get-CompatiblePython
-    if ($basePython) {
-        Write-Host "  using the Python already installed at $basePython"
-        Write-LogLine "Creating the toolkit environment from the Python already installed at $basePython."
+    if ($base.Python) {
+        Write-Host "  using the Python already installed at $($base.Python)"
+        Write-LogLine "Creating the toolkit environment from the Python already installed at $($base.Python)."
+    } elseif ($offlineBundle) {
+        Write-Host "  no 64-bit Python 3.13 found for the offline bundle; downloading $($base.Download)"
     } else {
-        Write-Host "  no compatible Python found; downloading $($config.python.version)"
-        Invoke-Uv python install $config.python.version
-        $basePython = $config.python.version
+        Write-Host "  no compatible Python found; downloading $($base.Download)"
     }
-    # --seed puts pip inside the environment. Without it there is no pip here
-    # and a bare "pip install" would silently use another Python on the machine.
-    Invoke-Uv venv $envDir --python $basePython --seed
+    New-ToolkitEnvironment $envDir $base -Offline:$offlineBundle
 }
 Write-Host "  one shared environment at $envDir" -ForegroundColor Green
 Write-Status 'python' 'installed'
