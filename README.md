@@ -1,5 +1,9 @@
 # portable-toolkit
 
+<p align="center">
+  <img src="docs/images/portable-toolkit-hero.jpg" alt="A travelling craftsman with a tool roll and a carved tool chest, on the road to a temple town" width="50%" />
+</p>
+
 Installs Git, Node, uv, Python and Px on a Windows machine without
 administrator rights and without a software request. Everything lands in one
 folder, and one command removes it again.
