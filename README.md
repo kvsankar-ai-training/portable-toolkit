@@ -8,7 +8,7 @@ Installs Git, Node, uv, Python and Px on a Windows machine without
 administrator rights and without a software request. Everything lands in one
 folder, and one command removes it again.
 
-![What portable-toolkit is for, what setup installs into C:	ools, and what you get](docs/images/portable-toolkit-infographic.png)
+![What portable-toolkit is for, what setup installs into C:\tools, and what you get](docs/images/portable-toolkit-infographic.png)
 
 ## When to use it
 
